@@ -22,6 +22,13 @@ class CourseAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['count'], 1)
 
+    def test_get_course_detail_anonymous(self):
+        """Аноним может смотреть детальную курса (200)."""
+        url = reverse('course-detail', args=[self.course.id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['title'], 'Тестовый курс')
+
     def test_create_course_anonymous_forbidden(self):
         """Аноним не может создать курс (403)."""
         url = reverse('course-list')
@@ -47,6 +54,14 @@ class CourseAPITests(APITestCase):
         self.course.refresh_from_db()
         self.assertEqual(self.course.title, 'Обновлённый курс')
 
+    def test_delete_course_authenticated(self):
+        """Авторизованный может удалить курс (204)."""
+        self.client.force_authenticate(user=self.user)
+        url = reverse('course-detail', args=[self.course.id])
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Course.objects.filter(pk=self.course.pk).exists())
+
 
 class LessonAPITests(APITestCase):
     """Тесты для Generic-классов Lesson."""
@@ -66,6 +81,13 @@ class LessonAPITests(APITestCase):
         url = reverse('lesson-list')
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_get_lesson_detail_anonymous(self):
+        """Аноним может смотреть детальную урока (200)."""
+        url = reverse('lesson-detail', args=[self.lesson.id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['title'], 'Урок 1')
 
     def test_create_lesson_authenticated(self):
         """Авторизованный может создать урок (201)."""
@@ -87,3 +109,20 @@ class LessonAPITests(APITestCase):
         data = {'course': self.course.id, 'title': 'Урок 2'}
         response = self.client.post(url, data)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_update_lesson_authenticated(self):
+        """Авторизованный может обновить урок (200)."""
+        self.client.force_authenticate(user=self.user)
+        url = reverse('lesson-update', args=[self.lesson.id])
+        response = self.client.patch(url, {'title': 'Обновлённый урок'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.lesson.refresh_from_db()
+        self.assertEqual(self.lesson.title, 'Обновлённый урок')
+
+    def test_delete_lesson_authenticated(self):
+        """Авторизованный может удалить урок (204)."""
+        self.client.force_authenticate(user=self.user)
+        url = reverse('lesson-delete', args=[self.lesson.id])
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Lesson.objects.filter(pk=self.lesson.pk).exists())
