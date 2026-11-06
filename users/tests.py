@@ -1,7 +1,8 @@
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
-from datetime import timedelta
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -177,6 +178,48 @@ class PaymentAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         ids = [p['id'] for p in response.data['results']]
         self.assertEqual(ids, [self.payment3.id, self.payment2.id, self.payment1.id])
+
+
+class UserViewSetTests(APITestCase):
+    """Тесты для UserViewSet: CRUD пользователей."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user1 = User.objects.create_user(
+            email='view1@agroacademy.local',
+            password='test12345',
+        )
+        cls.user2 = User.objects.create_user(
+            email='view2@agroacademy.local',
+            password='test12345',
+        )
+
+    def test_list_users_anonymous(self):
+        """Аноним может смотреть список пользователей (200)."""
+        url = reverse('user-list')
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['count'], 2)
+
+    def test_create_user_anonymous_forbidden(self):
+        """Аноним не может создать пользователя (403)."""
+        url = reverse('user-list')
+        data = {
+            'email': 'new@agroacademy.local',
+            'phone': '+79990000000',
+            'city': 'Астрахань',
+        }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_retrieve_user_with_payments(self):
+        """Детальная пользователя содержит payments и payments_count."""
+        url = reverse('user-detail', args=[self.user1.id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('payments', response.data)
+        self.assertIn('payments_count', response.data)
+        self.assertEqual(response.data['email'], 'view1@agroacademy.local')
 
 
 class UserPaymentsHistoryTests(APITestCase):

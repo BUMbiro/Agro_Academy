@@ -30,12 +30,17 @@
 
 ## 🧪 Тесты
 
-В проекте **24 unit-теста** (`APITestCase`):
+В проекте **30 unit-тестов** (`APITestCase`):
 
 **Курсы (6 тестов):**
 - Список и детальная для анонимов (200).
 - Запрет создания для анонимов (403).
 - Создание, обновление и удаление для авторизованных (201/200/204).
+
+**Сериализатор курса (3 теста):**
+- `lessons_count` возвращает корректное число (`SerializerMethodField`).
+- Вложенный `LessonSerializer` отдаёт список уроков курса.
+- Курс без уроков: `lessons_count=0`, `lessons=[]`.
 
 **Уроки (6 тестов):**
 - Список и детальная для анонимов (200).
@@ -50,8 +55,13 @@
 - Фильтр по способу оплаты (`?payment_method=cash`).
 - Сортировка по дате: asc (`?ordering=payment_date`) и desc (`?ordering=-payment_date`).
 
+**Пользователи (3 теста):**
+- Список для анонимов (200).
+- Запрет создания для анонимов (403).
+- Детальная с `payments` и `payments_count`.
+
 **История платежей (1 тест):**
-- `UserSerializer` отдаёт `payments` и `payments_count` (доп. задание *).
+- `UserSerializer` отдаёт `payments` и `payments_count` (доп. задание*).
 
 **Для запуска:**
 
@@ -173,23 +183,24 @@ Agro_Academy/
 │   │   └── payments.json   # Фикстура платежей (4 записи)
 │   ├── migrations/
 │   │   ├── 0001_initial.py
-│   │   └── 0002_payment.py
-│   ├── admin.py
+│   │   ├── 0002_payment.py
+│   │   └── 0003_alter_user_options.py
+│   ├── admin.py            # UserAdmin, PaymentAdmin
 │   ├── apps.py
 │   ├── managers.py         # UserManager (создание по email)
 │   ├── models.py           # User (AbstractBaseUser), Payment
 │   ├── serializers.py      # UserSerializer, PaymentSerializer
-│   ├── tests.py            # 12 тестов (APITestCase)
+│   ├── tests.py            # 15 тестов (12 Payment + 3 UserViewSet)
 │   ├── urls.py             # Роутер для UserViewSet, PaymentViewSet
 │   └── views.py            # UserViewSet, PaymentViewSet
 ├── materials/              # Приложение курсов и уроков
 │   ├── migrations/
 │   │   └── 0001_initial.py
-│   ├── admin.py
+│   ├── admin.py            # CourseAdmin, LessonAdmin
 │   ├── apps.py
 │   ├── models.py           # Course, Lesson (FK)
 │   ├── serializers.py      # CourseSerializer, LessonSerializer
-│   ├── tests.py            # 12 тестов (APITestCase)
+│   ├── tests.py            # 15 тестов (6 Course + 6 Lesson + 3 Serializer)
 │   ├── urls.py             # Роутер + Generic-классы
 │   └── views.py            # CourseViewSet, Lesson*APIView
 ├── config/                 # Настройки проекта
