@@ -1,9 +1,10 @@
+from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
-from django.contrib.auth import get_user_model
 
 from materials.models import Course, Lesson
+from materials.serializers import CourseSerializer
 
 User = get_user_model()
 
@@ -61,6 +62,35 @@ class CourseAPITests(APITestCase):
         response = self.client.delete(url)
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(Course.objects.filter(pk=self.course.pk).exists())
+
+
+class CourseSerializerTests(APITestCase):
+    """Тесты для CourseSerializer: lessons_count и вложенные lessons (Задание 1 и 3)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.course = Course.objects.create(title='Курс с уроками')
+        cls.lesson1 = Lesson.objects.create(course=cls.course, title='Урок 1')
+        cls.lesson2 = Lesson.objects.create(course=cls.course, title='Урок 2')
+
+    def test_lessons_count_field(self):
+        """SerializerMethodField lessons_count возвращает корректное число."""
+        data = CourseSerializer(self.course).data
+        self.assertEqual(data['lessons_count'], 2)
+
+    def test_lessons_field_contains_nested_data(self):
+        """Вложенный LessonSerializer отдаёт список уроков курса."""
+        data = CourseSerializer(self.course).data
+        self.assertEqual(len(data['lessons']), 2)
+        titles = {lesson['title'] for lesson in data['lessons']}
+        self.assertEqual(titles, {'Урок 1', 'Урок 2'})
+
+    def test_course_without_lessons(self):
+        """Курс без уроков: lessons_count=0, lessons=[]."""
+        empty_course = Course.objects.create(title='Пустой курс')
+        data = CourseSerializer(empty_course).data
+        self.assertEqual(data['lessons_count'], 0)
+        self.assertEqual(data['lessons'], [])
 
 
 class LessonAPITests(APITestCase):
