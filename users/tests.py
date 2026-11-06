@@ -17,7 +17,6 @@ class PaymentAPITests(APITestCase):
 
     @classmethod
     def setUpTestData(cls):
-        # Пользователи
         cls.user1 = User.objects.create_user(
             email='test1@agroacademy.local',
             password='test12345',
@@ -26,15 +25,11 @@ class PaymentAPITests(APITestCase):
             email='test2@agroacademy.local',
             password='test12345',
         )
-
-        # Курсы и уроки
         cls.course1 = Course.objects.create(title='Курс 1')
         cls.course2 = Course.objects.create(title='Курс 2')
         cls.lesson1 = Lesson.objects.create(course=cls.course1, title='Урок 1')
         cls.lesson2 = Lesson.objects.create(course=cls.course2, title='Урок 2')
 
-        # Платежи с разными датами, способами, курсами/уроками
-        # ВАЖНО: payment_date — auto_now_add, поэтому задаём даты через update()
         now = timezone.now()
         cls.payment1 = Payment.objects.create(
             user=cls.user1,
@@ -54,20 +49,12 @@ class PaymentAPITests(APITestCase):
             amount='3000.00',
             payment_method=Payment.PaymentMethod.TRANSFER,
         )
-
-        # Явно задаём даты: payment1 — самый старый, payment3 — самый новый
         Payment.objects.filter(pk=cls.payment1.pk).update(payment_date=now - timedelta(days=2))
         Payment.objects.filter(pk=cls.payment2.pk).update(payment_date=now - timedelta(days=1))
         Payment.objects.filter(pk=cls.payment3.pk).update(payment_date=now)
-
-        # Обновляем объекты в памяти, чтобы тесты видели актуальные даты
         cls.payment1.refresh_from_db()
         cls.payment2.refresh_from_db()
         cls.payment3.refresh_from_db()
-
-    # ------------------------------------------------------------
-    # Права доступа
-    # ------------------------------------------------------------
 
     def test_list_payments_anonymous(self):
         """Аноним может смотреть список платежей (200)."""
@@ -87,10 +74,6 @@ class PaymentAPITests(APITestCase):
         }
         response = self.client.post(url, data)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-
-    # ------------------------------------------------------------
-    # CRUD
-    # ------------------------------------------------------------
 
     def test_create_payment_authenticated(self):
         """Авторизованный может создать платёж (201)."""
@@ -131,10 +114,6 @@ class PaymentAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(Payment.objects.filter(pk=self.payment1.pk).exists())
 
-    # ------------------------------------------------------------
-    # Фильтры
-    # ------------------------------------------------------------
-
     def test_filter_by_course(self):
         """Фильтр ?course=<id> возвращает только платежи по этому курсу."""
         url = reverse('payment-list')
@@ -159,9 +138,14 @@ class PaymentAPITests(APITestCase):
         self.assertEqual(response.data['count'], 1)
         self.assertEqual(response.data['results'][0]['id'], self.payment2.id)
 
-    # ------------------------------------------------------------
-    # Сортировка
-    # ------------------------------------------------------------
+    def test_filter_by_user(self):
+        """Фильтр ?user=<id> возвращает только платежи пользователя."""
+        url = reverse('payment-list')
+        response = self.client.get(url, {'user': self.user1.id})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['count'], 2)
+        ids = {p['id'] for p in response.data['results']}
+        self.assertEqual(ids, {self.payment1.id, self.payment2.id})
 
     def test_ordering_by_payment_date_asc(self):
         """Сортировка ?ordering=payment_date — от старых к новым."""
@@ -181,7 +165,7 @@ class PaymentAPITests(APITestCase):
 
 
 class UserViewSetTests(APITestCase):
-    """Тесты для UserViewSet: CRUD пользователей."""
+    """Тесты для UserViewSet: CRUD, права, история платежей."""
 
     @classmethod
     def setUpTestData(cls):
@@ -220,6 +204,32 @@ class UserViewSetTests(APITestCase):
         self.assertIn('payments', response.data)
         self.assertIn('payments_count', response.data)
         self.assertEqual(response.data['email'], 'view1@agroacademy.local')
+
+    def test_destroy_user_anonymous_forbidden(self):
+        """Аноним не может удалить пользователя (403)."""
+        url = reverse('user-detail', args=[self.user1.id])
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_destroy_user_authenticated_forbidden(self):
+        """Обычный авторизованный не может удалить пользователя (403)."""
+        self.client.force_authenticate(user=self.user2)
+        url = reverse('user-detail', args=[self.user1.id])
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(User.objects.filter(pk=self.user1.pk).exists())
+
+    def test_destroy_user_admin_allowed(self):
+        """Админ (is_staff) может удалить пользователя (204)."""
+        admin = User.objects.create_superuser(
+            email='admin-test@agroacademy.local',
+            password='test12345',
+        )
+        self.client.force_authenticate(user=admin)
+        url = reverse('user-detail', args=[self.user1.id])
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(User.objects.filter(pk=self.user1.pk).exists())
 
 
 class UserPaymentsHistoryTests(APITestCase):

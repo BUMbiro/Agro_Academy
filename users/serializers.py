@@ -13,8 +13,18 @@ class PaymentSerializer(serializers.ModelSerializer):
     - amount, payment_method, payment_date.
     """
 
-    course_title = serializers.CharField(source='course.title', read_only=True)
-    lesson_title = serializers.CharField(source='lesson.title', read_only=True)
+    course_title = serializers.CharField(
+        source='course.title',
+        read_only=True,
+        allow_null=True,
+        default=None,
+    )
+    lesson_title = serializers.CharField(
+        source='lesson.title',
+        read_only=True,
+        allow_null=True,
+        default=None,
+    )
     payment_method_display = serializers.CharField(
         source='get_payment_method_display',
         read_only=True,

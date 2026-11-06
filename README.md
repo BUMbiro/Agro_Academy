@@ -25,12 +25,13 @@
 - **Аноним** может **читать** (GET) курсы, уроки, пользователей, платежи.
 - **Авторизованный** может **создавать/редактировать/удалять** (POST, PUT, PATCH, DELETE).
 - Реализовано через `IsAuthenticatedOrReadOnly` (DRF).
+- **Удаление пользователей** — только для админа (`is_staff`), через `IsAdminUser`.
 
 ---
 
 ## 🧪 Тесты
 
-В проекте **30 unit-тестов** (`APITestCase`):
+В проекте **34 unit-теста** (`APITestCase`):
 
 **Курсы (6 тестов):**
 - Список и детальная для анонимов (200).
@@ -47,21 +48,23 @@
 - Запрет создания для анонимов (403).
 - Создание, обновление и удаление для авторизованных (201/200/204).
 
-**Платежи (11 тестов):**
+**Платежи (12 тестов):**
 - Список для анонимов (200), запрет создания (403).
 - CRUD для авторизованных (201/200/204).
+- Фильтр по пользователю (`?user=<id>`).
 - Фильтр по курсу (`?course=<id>`).
 - Фильтр по уроку (`?lesson=<id>`).
 - Фильтр по способу оплаты (`?payment_method=cash`).
 - Сортировка по дате: asc (`?ordering=payment_date`) и desc (`?ordering=-payment_date`).
 
-**Пользователи (3 теста):**
+**Пользователи (6 тестов):**
 - Список для анонимов (200).
 - Запрет создания для анонимов (403).
 - Детальная с `payments` и `payments_count`.
+- Удаление: аноним — 403, обычный авторизованный — 403, админ — 204.
 
 **История платежей (1 тест):**
-- `UserSerializer` отдаёт `payments` и `payments_count` (доп. задание*).
+- `UserSerializer` отдаёт `payments` и `payments_count` (доп. задание *).
 
 **Для запуска:**
 
@@ -190,7 +193,7 @@ Agro_Academy/
 │   ├── managers.py         # UserManager (создание по email)
 │   ├── models.py           # User (AbstractBaseUser), Payment
 │   ├── serializers.py      # UserSerializer, PaymentSerializer
-│   ├── tests.py            # 15 тестов (12 Payment + 3 UserViewSet)
+│   ├── tests.py            # 19 тестов (12 Payment + 6 UserViewSet + 1 история)
 │   ├── urls.py             # Роутер для UserViewSet, PaymentViewSet
 │   └── views.py            # UserViewSet, PaymentViewSet
 ├── materials/              # Приложение курсов и уроков
@@ -250,6 +253,7 @@ Agro_Academy/
 - `DELETE /api/payments/<id>/` — удалить
 
 **Фильтры для платежей:**
+- `?user=<id>` — по пользователю
 - `?course=<id>` — по курсу
 - `?lesson=<id>` — по уроку
 - `?payment_method=cash|transfer` — по способу оплаты
