@@ -6,11 +6,8 @@ from .models import Payment, User
 class PaymentSerializer(serializers.ModelSerializer):
     """Сериализатор платежа.
 
-    Отдаёт:
-    - user (id),
-    - course (id) и course_title (для читаемости),
-    - lesson (id) и lesson_title (для читаемости),
-    - amount, payment_method, payment_date.
+    Валидация: должен быть выбран ровно один тип — курс ИЛИ урок.
+    Учитывает PATCH: если поле не передано — берём из instance.
     """
 
     course_title = serializers.CharField(
@@ -45,6 +42,24 @@ class PaymentSerializer(serializers.ModelSerializer):
             'payment_method_display',
         ]
         read_only_fields = ['id', 'payment_date']
+
+    def validate(self, attrs):
+        """Валидация: ровно один из course/lesson.
+
+        При PATCH поля могут не передаваться — берём текущие из instance.
+        """
+        if self.instance is not None:
+            course = attrs.get('course', self.instance.course)
+            lesson = attrs.get('lesson', self.instance.lesson)
+        else:
+            course = attrs.get('course')
+            lesson = attrs.get('lesson')
+
+        if bool(course) == bool(lesson):
+            raise serializers.ValidationError(
+                'Должен быть выбран ровно один тип оплаты: курс ИЛИ урок.'
+            )
+        return attrs
 
 
 class UserSerializer(serializers.ModelSerializer):

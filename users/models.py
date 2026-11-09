@@ -1,5 +1,7 @@
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
+from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q, CheckConstraint
 
 from .managers import UserManager
 
@@ -52,16 +54,19 @@ class User(AbstractBaseUser, PermissionsMixin):
     class Meta:
         verbose_name = 'Пользователь'
         verbose_name_plural = 'Пользователи'
-        ordering = ['-date_joined']  # свежие сверху — убирает UnorderedObjectListWarning
+        ordering = ['-date_joined']
 
     def __str__(self):
         return self.email
 
 
 class Payment(models.Model):
-    """Платёж: пользователь оплачивает курс или отдельный урок.
+    """Платёж: пользователь оплачивает курс ИЛИ отдельный урок.
 
-    По заданию: оплаченный курс ИЛИ урок — один заполнен, другой null.
+    Валидация: должен быть выбран ровно один тип — курс ИЛИ урок.
+    Реализовано на двух уровнях:
+    - CheckConstraint в Meta (уровень БД, PostgreSQL);
+    - clean() + PaymentSerializer.validate() (уровень приложения).
     """
 
     class PaymentMethod(models.TextChoices):
@@ -110,6 +115,23 @@ class Payment(models.Model):
         verbose_name = 'Платёж'
         verbose_name_plural = 'Платежи'
         ordering = ['-payment_date']
+        constraints = [
+            CheckConstraint(
+                condition=(
+                    (Q(course__isnull=False) & Q(lesson__isnull=True)) |
+                    (Q(course__isnull=True) & Q(lesson__isnull=False))
+                ),
+                name='payment_course_xor_lesson',
+            ),
+        ]
+
+    def clean(self):
+        """Валидация: ровно один из course/lesson."""
+        super().clean()
+        if bool(self.course) == bool(self.lesson):
+            raise ValidationError(
+                'Должен быть выбран ровно один тип оплаты: курс ИЛИ урок.'
+            )
 
     def __str__(self):
         target = self.course or self.lesson or '—'

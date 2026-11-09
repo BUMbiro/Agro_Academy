@@ -13,7 +13,7 @@ User = get_user_model()
 
 
 class PaymentAPITests(APITestCase):
-    """Тесты для PaymentViewSet: CRUD, фильтры, сортировка, права."""
+    """Тесты для PaymentViewSet: CRUD, фильтры, сортировка, права, валидация."""
 
     @classmethod
     def setUpTestData(cls):
@@ -23,6 +23,10 @@ class PaymentAPITests(APITestCase):
         )
         cls.user2 = User.objects.create_user(
             email='test2@agroacademy.local',
+            password='test12345',
+        )
+        cls.admin = User.objects.create_superuser(
+            email='admin-test@agroacademy.local',
             password='test12345',
         )
         cls.course1 = Course.objects.create(title='Курс 1')
@@ -75,9 +79,22 @@ class PaymentAPITests(APITestCase):
         response = self.client.post(url, data)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_create_payment_authenticated(self):
-        """Авторизованный может создать платёж (201)."""
+    def test_create_payment_authenticated_forbidden(self):
+        """Обычный авторизованный не может создать платёж (403)."""
         self.client.force_authenticate(user=self.user1)
+        url = reverse('payment-list')
+        data = {
+            'user': self.user1.id,
+            'course': self.course1.id,
+            'amount': '1000.00',
+            'payment_method': 'cash',
+        }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_create_payment_admin_allowed(self):
+        """Админ может создать платёж (201)."""
+        self.client.force_authenticate(user=self.admin)
         url = reverse('payment-list')
         data = {
             'user': self.user1.id,
@@ -89,6 +106,32 @@ class PaymentAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(Payment.objects.count(), 4)
 
+    def test_create_payment_both_course_and_lesson_fails(self):
+        """Нельзя создать платёж и с курсом, и с уроком (400)."""
+        self.client.force_authenticate(user=self.admin)
+        url = reverse('payment-list')
+        data = {
+            'user': self.user1.id,
+            'course': self.course1.id,
+            'lesson': self.lesson1.id,
+            'amount': '1000.00',
+            'payment_method': 'cash',
+        }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_create_payment_neither_course_nor_lesson_fails(self):
+        """Нельзя создать платёж без курса и без урока (400)."""
+        self.client.force_authenticate(user=self.admin)
+        url = reverse('payment-list')
+        data = {
+            'user': self.user1.id,
+            'amount': '1000.00',
+            'payment_method': 'cash',
+        }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_retrieve_payment(self):
         """Детальная платежа (200)."""
         self.client.force_authenticate(user=self.user1)
@@ -97,25 +140,40 @@ class PaymentAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['amount'], '5000.00')
 
-    def test_update_payment_authenticated(self):
-        """Авторизованный может обновить платёж (200)."""
-        self.client.force_authenticate(user=self.user1)
+    def test_update_payment_admin_allowed(self):
+        """Админ может обновить платёж (200)."""
+        self.client.force_authenticate(user=self.admin)
         url = reverse('payment-detail', args=[self.payment1.id])
         response = self.client.patch(url, {'amount': '5500.00'})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.payment1.refresh_from_db()
         self.assertEqual(self.payment1.amount, 5500)
 
-    def test_delete_payment_authenticated(self):
-        """Авторизованный может удалить платёж (204)."""
+    def test_update_payment_authenticated_forbidden(self):
+        """Обычный авторизованный не может обновить платёж (403)."""
         self.client.force_authenticate(user=self.user1)
+        url = reverse('payment-detail', args=[self.payment1.id])
+        response = self.client.patch(url, {'amount': '5500.00'})
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_delete_payment_admin_allowed(self):
+        """Админ может удалить платёж (204)."""
+        self.client.force_authenticate(user=self.admin)
         url = reverse('payment-detail', args=[self.payment1.id])
         response = self.client.delete(url)
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(Payment.objects.filter(pk=self.payment1.pk).exists())
 
+    def test_delete_payment_authenticated_forbidden(self):
+        """Обычный авторизованный не может удалить платёж (403)."""
+        self.client.force_authenticate(user=self.user1)
+        url = reverse('payment-detail', args=[self.payment1.id])
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(Payment.objects.filter(pk=self.payment1.pk).exists())
+
     def test_filter_by_course(self):
-        """Фильтр ?course=<id> возвращает только платежи по этому курсу."""
+        """Фильтр ?course=<id>."""
         url = reverse('payment-list')
         response = self.client.get(url, {'course': self.course1.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -123,7 +181,7 @@ class PaymentAPITests(APITestCase):
         self.assertEqual(response.data['results'][0]['id'], self.payment1.id)
 
     def test_filter_by_lesson(self):
-        """Фильтр ?lesson=<id> возвращает только платежи по этому уроку."""
+        """Фильтр ?lesson=<id>."""
         url = reverse('payment-list')
         response = self.client.get(url, {'lesson': self.lesson1.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -131,7 +189,7 @@ class PaymentAPITests(APITestCase):
         self.assertEqual(response.data['results'][0]['id'], self.payment2.id)
 
     def test_filter_by_payment_method(self):
-        """Фильтр ?payment_method=cash возвращает только наличные."""
+        """Фильтр ?payment_method=cash."""
         url = reverse('payment-list')
         response = self.client.get(url, {'payment_method': 'cash'})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -139,7 +197,7 @@ class PaymentAPITests(APITestCase):
         self.assertEqual(response.data['results'][0]['id'], self.payment2.id)
 
     def test_filter_by_user(self):
-        """Фильтр ?user=<id> возвращает только платежи пользователя."""
+        """Фильтр ?user=<id>."""
         url = reverse('payment-list')
         response = self.client.get(url, {'user': self.user1.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -148,18 +206,16 @@ class PaymentAPITests(APITestCase):
         self.assertEqual(ids, {self.payment1.id, self.payment2.id})
 
     def test_ordering_by_payment_date_asc(self):
-        """Сортировка ?ordering=payment_date — от старых к новым."""
+        """Сортировка ?ordering=payment_date — asc."""
         url = reverse('payment-list')
         response = self.client.get(url, {'ordering': 'payment_date'})
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
         ids = [p['id'] for p in response.data['results']]
         self.assertEqual(ids, [self.payment1.id, self.payment2.id, self.payment3.id])
 
     def test_ordering_by_payment_date_desc(self):
-        """Сортировка ?ordering=-payment_date — от новых к старым."""
+        """Сортировка ?ordering=-payment_date — desc."""
         url = reverse('payment-list')
         response = self.client.get(url, {'ordering': '-payment_date'})
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
         ids = [p['id'] for p in response.data['results']]
         self.assertEqual(ids, [self.payment3.id, self.payment2.id, self.payment1.id])
 

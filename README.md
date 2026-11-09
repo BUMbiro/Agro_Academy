@@ -26,12 +26,13 @@
 - **Авторизованный** может **создавать/редактировать/удалять** (POST, PUT, PATCH, DELETE).
 - Реализовано через `IsAuthenticatedOrReadOnly` (DRF).
 - **Удаление пользователей** — только для админа (`is_staff`), через `IsAdminUser`.
+- **Платежи** — создание/изменение/удаление только для админа (`IsAdminUser`). Чтение — всем.
 
 ---
 
 ## 🧪 Тесты
 
-В проекте **34 unit-теста** (`APITestCase`):
+В проекте **39 unit-тестов** (`APITestCase`):
 
 **Курсы (6 тестов):**
 - Список и детальная для анонимов (200).
@@ -48,9 +49,12 @@
 - Запрет создания для анонимов (403).
 - Создание, обновление и удаление для авторизованных (201/200/204).
 
-**Платежи (12 тестов):**
-- Список для анонимов (200), запрет создания (403).
-- CRUD для авторизованных (201/200/204).
+**Платежи (17 тестов):**
+- Список для анонимов (200), запрет создания для анонимов (403).
+- Запрет создания/изменения/удаления для обычного авторизованного (403).
+- Создание/изменение/удаление для админа (201/200/204).
+- Валидация: нельзя создать платёж и с курсом, и с уроком (400).
+- Валидация: нельзя создать платёж без курса и без урока (400).
 - Фильтр по пользователю (`?user=<id>`).
 - Фильтр по курсу (`?course=<id>`).
 - Фильтр по уроку (`?lesson=<id>`).
@@ -64,7 +68,7 @@
 - Удаление: аноним — 403, обычный авторизованный — 403, админ — 204.
 
 **История платежей (1 тест):**
-- `UserSerializer` отдаёт `payments` и `payments_count` (доп. задание *).
+- `UserSerializer` отдаёт `payments` и `payments_count` (доп. задание*).
 
 **Для запуска:**
 
@@ -158,6 +162,17 @@ python manage.py loaddata payments
 ```
 Фикстура лежит в `users/fixtures/payments.json` — 4 платежа (курсы, уроки, разные способы оплаты).
 
+**⚠️ Важно: фикстура ссылается на существующие `user_id`, `course_id`, `lesson_id`. 
+Перед загрузкой должны быть созданы:**
+
+- пользователи с `id`=1 и `id`=2 (см. креды в `README`)
+
+- курсы с `id`=1 и `id`=2
+
+- уроки с `id`=2 и `id`=4
+
+Если их нет — создайте вручную (через админку или `shell`) или загрузите свою фикстуру с ними.
+
 ### 8. Создайте суперпользователя (для админки):
 
 ```bash
@@ -187,15 +202,16 @@ Agro_Academy/
 │   ├── migrations/
 │   │   ├── 0001_initial.py
 │   │   ├── 0002_payment.py
-│   │   └── 0003_alter_user_options.py
+│   │   ├── 0003_alter_user_options.py
+│   │   └── 0004_payment_payment_course_xor_lesson.py
 │   ├── admin.py            # UserAdmin, PaymentAdmin
 │   ├── apps.py
 │   ├── managers.py         # UserManager (создание по email)
-│   ├── models.py           # User (AbstractBaseUser), Payment
-│   ├── serializers.py      # UserSerializer, PaymentSerializer
-│   ├── tests.py            # 19 тестов (12 Payment + 6 UserViewSet + 1 история)
+│   ├── models.py           # User (AbstractBaseUser), Payment (+ валидация)
+│   ├── serializers.py      # UserSerializer, PaymentSerializer (+ validate)
+│   ├── tests.py            # 24 теста (17 Payment + 6 UserViewSet + 1 история)
 │   ├── urls.py             # Роутер для UserViewSet, PaymentViewSet
-│   └── views.py            # UserViewSet, PaymentViewSet
+│   └── views.py            # UserViewSet, PaymentViewSet (+ permissions)
 ├── materials/              # Приложение курсов и уроков
 │   ├── migrations/
 │   │   └── 0001_initial.py
@@ -272,6 +288,7 @@ Agro_Academy/
 
 **Платежи**
 - `Payment — user (FK), payment_date, course (FK, null), lesson (FK, null), amount, payment_method (cash/transfer).`
+- Валидация: ровно один из `course/lesson` (`CheckConstraint + clean()` + `serializer.validate()`).
 
 **Материалы**
 - `Course — title, preview, description, created_at.`
