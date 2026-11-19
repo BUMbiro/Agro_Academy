@@ -68,7 +68,7 @@ class PaymentAPITests(APITestCase):
         self.assertEqual(response.data['count'], 3)
 
     def test_create_payment_anonymous_forbidden(self):
-        """Аноним не может создать платёж (403)."""
+        """Аноним не может создать платёж (401)."""
         url = reverse('payment-list')
         data = {
             'user': self.user1.id,
@@ -77,7 +77,7 @@ class PaymentAPITests(APITestCase):
             'payment_method': 'cash',
         }
         response = self.client.post(url, data)
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_create_payment_authenticated_forbidden(self):
         """Обычный авторизованный не может создать платёж (403)."""
@@ -241,19 +241,24 @@ class UserViewSetTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['count'], 2)
 
-    def test_create_user_anonymous_forbidden(self):
-        """Аноним не может создать пользователя (403)."""
+    def test_create_user_anonymous_allowed(self):
+        """Аноним МОЖЕТ создать пользователя (регистрация) (201)."""
         url = reverse('user-list')
         data = {
             'email': 'new@agroacademy.local',
+            'password': 'newpassword123',
             'phone': '+79990000000',
             'city': 'Астрахань',
         }
         response = self.client.post(url, data)
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(User.objects.filter(email='new@agroacademy.local').exists())
+        new_user = User.objects.get(email='new@agroacademy.local')
+        self.assertTrue(new_user.check_password('newpassword123'))
 
     def test_retrieve_user_with_payments(self):
-        """Детальная пользователя содержит payments и payments_count."""
+        """Владелец видит свои payments и payments_count (200)."""
+        self.client.force_authenticate(user=self.user1)  # <-- Авторизуем владельца
         url = reverse('user-detail', args=[self.user1.id])
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -261,11 +266,20 @@ class UserViewSetTests(APITestCase):
         self.assertIn('payments_count', response.data)
         self.assertEqual(response.data['email'], 'view1@agroacademy.local')
 
+    def test_retrieve_foreign_user_hides_payments(self):
+        """При просмотре чужого профиля payments скрыты (200)."""
+        self.client.force_authenticate(user=self.user2)  # <-- Авторизуем другого
+        url = reverse('user-detail', args=[self.user1.id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotIn('payments', response.data)
+        self.assertNotIn('payments_count', response.data)
+
     def test_destroy_user_anonymous_forbidden(self):
-        """Аноним не может удалить пользователя (403)."""
+        """Аноним не может удалить пользователя (401)."""
         url = reverse('user-detail', args=[self.user1.id])
         response = self.client.delete(url)
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_destroy_user_authenticated_forbidden(self):
         """Обычный авторизованный не может удалить пользователя (403)."""
@@ -312,7 +326,8 @@ class UserPaymentsHistoryTests(APITestCase):
         )
 
     def test_user_serializer_contains_payments(self):
-        """UserSerializer отдаёт историю платежей и их количество."""
+        """Владелец видит историю своих платежей."""
+        self.client.force_authenticate(user=self.user)  # <-- Авторизуем владельца
         url = reverse('user-detail', args=[self.user.id])
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -320,3 +335,11 @@ class UserPaymentsHistoryTests(APITestCase):
         self.assertEqual(len(response.data['payments']), 2)
         amounts = {p['amount'] for p in response.data['payments']}
         self.assertEqual(amounts, {'1000.00', '2000.00'})
+
+    def test_user_serializer_hides_payments_for_anonymous(self):
+        """Аноним НЕ видит историю платежей (доп. задание)."""
+        url = reverse('user-detail', args=[self.user.id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotIn('payments', response.data)
+        self.assertNotIn('payments_count', response.data)
