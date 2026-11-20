@@ -29,10 +29,11 @@ class PaymentAPITests(APITestCase):
             email='admin-test@agroacademy.local',
             password='test12345',
         )
-        cls.course1 = Course.objects.create(title='Курс 1')
-        cls.course2 = Course.objects.create(title='Курс 2')
-        cls.lesson1 = Lesson.objects.create(course=cls.course1, title='Урок 1')
-        cls.lesson2 = Lesson.objects.create(course=cls.course2, title='Урок 2')
+        # Добавили владельца при создании курсов и уроков
+        cls.course1 = Course.objects.create(title='Курс 1', owner=cls.user1)
+        cls.course2 = Course.objects.create(title='Курс 2', owner=cls.user2)
+        cls.lesson1 = Lesson.objects.create(course=cls.course1, title='Урок 1', owner=cls.user1)
+        cls.lesson2 = Lesson.objects.create(course=cls.course2, title='Урок 2', owner=cls.user2)
 
         now = timezone.now()
         cls.payment1 = Payment.objects.create(
@@ -258,7 +259,7 @@ class UserViewSetTests(APITestCase):
 
     def test_retrieve_user_with_payments(self):
         """Владелец видит свои payments и payments_count (200)."""
-        self.client.force_authenticate(user=self.user1)  # <-- Авторизуем владельца
+        self.client.force_authenticate(user=self.user1)
         url = reverse('user-detail', args=[self.user1.id])
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -268,7 +269,7 @@ class UserViewSetTests(APITestCase):
 
     def test_retrieve_foreign_user_hides_payments(self):
         """При просмотре чужого профиля payments скрыты (200)."""
-        self.client.force_authenticate(user=self.user2)  # <-- Авторизуем другого
+        self.client.force_authenticate(user=self.user2)
         url = reverse('user-detail', args=[self.user1.id])
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -311,7 +312,8 @@ class UserPaymentsHistoryTests(APITestCase):
             email='history@agroacademy.local',
             password='test12345',
         )
-        cls.course = Course.objects.create(title='Курс')
+        # Добавили владельца курсу
+        cls.course = Course.objects.create(title='Курс', owner=cls.user)
         Payment.objects.create(
             user=cls.user,
             course=cls.course,
@@ -327,7 +329,7 @@ class UserPaymentsHistoryTests(APITestCase):
 
     def test_user_serializer_contains_payments(self):
         """Владелец видит историю своих платежей."""
-        self.client.force_authenticate(user=self.user)  # <-- Авторизуем владельца
+        self.client.force_authenticate(user=self.user)
         url = reverse('user-detail', args=[self.user.id])
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)

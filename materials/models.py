@@ -24,8 +24,6 @@ class Course(models.Model):
         on_delete=models.CASCADE,
         related_name='courses',
         verbose_name='Владелец',
-        null=True,
-        blank=True,
     )
     created_at = models.DateTimeField(
         auto_now_add=True,
@@ -73,8 +71,6 @@ class Lesson(models.Model):
         on_delete=models.CASCADE,
         related_name='lessons',
         verbose_name='Владелец',
-        null=True,
-        blank=True,
     )
     created_at = models.DateTimeField(
         auto_now_add=True,

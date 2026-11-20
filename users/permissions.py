@@ -6,6 +6,9 @@ class IsModerator(permissions.BasePermission):
     message = 'Вы не являетесь модератором.'
 
     def has_permission(self, request, view):
+        # Проверка на аутентификацию (рекомендация наставника)
+        if not request.user or not request.user.is_authenticated:
+            return False
         return request.user.groups.filter(name='Moderator').exists()
 
 
@@ -14,6 +17,9 @@ class IsNotModerator(permissions.BasePermission):
     message = 'Модераторы не могут выполнять это действие.'
 
     def has_permission(self, request, view):
+        # Проверка на аутентификацию (рекомендация наставника)
+        if not request.user or not request.user.is_authenticated:
+            return False
         return not request.user.groups.filter(name='Moderator').exists()
 
 
