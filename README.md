@@ -8,11 +8,15 @@
 
 ## 🚀 Функционал
 
-- **Пользователи** — CRUD через `ModelViewSet` (включая редактирование профиля любого пользователя).
-- **Курсы** — CRUD через `ModelViewSet` (название, превью, описание, количество уроков).
-- **Уроки** — CRUD через `Generic`-классы (название, описание, превью, ссылка на видео, привязка к курсу).
-- **Платежи** — CRUD через `ModelViewSet` (пользователь, дата, курс/урок, сумма, способ оплаты).
-- **Связь** — Урок → FK → Курс (`related_name='lessons'`), Платёж → FK → Пользователь/Курс/Урок.
+- **Пользователи** — CRUD через `ModelViewSet`, регистрация, редактирование профиля.
+- **Курсы** — CRUD через `ModelViewSet` (включая количество уроков и вложенный список).
+- **Уроки** — CRUD через `Generic`-классы (привязка к курсу, ссылка на видео).
+- **Платежи** — CRUD через `ModelViewSet` (фильтрация, сортировка, валидация).
+- **JWT-авторизация** — получение и обновление токенов (`access`/`refresh`).
+- **Роли** — модераторы (редактируют всё, но не создают/удаляют) и владельцы (управляют только своими объектами).
+- **Связи** — Урок → FK → Курс (`related_name='lessons'`), Платёж → FK → Пользователь/Курс/Урок. Курсы и уроки имеют
+владельца (`owner`).
+- **Оптимизация** — `select_related` и `prefetch_related` для избежания N+1 запросов.
 - **Сериализаторы** — `ModelSerializer` для всех моделей, `SerializerMethodField` для подсчёта уроков и платежей.
 - **Пагинация** — `PageNumberPagination` (по 10 записей).
 - **Фильтрация** — `DjangoFilterBackend` (по курсу, уроку, способу оплаты).
@@ -23,52 +27,24 @@
 ## 🔒 Безопасность
 
 - **Аноним** может **читать** (GET) курсы, уроки, пользователей, платежи.
-- **Авторизованный** может **создавать/редактировать/удалять** (POST, PUT, PATCH, DELETE).
-- Реализовано через `IsAuthenticatedOrReadOnly` (DRF).
-- **Удаление пользователей** — только для админа (`is_staff`), через `IsAdminUser`.
-- **Платежи** — создание/изменение/удаление только для админа (`IsAdminUser`). Чтение — всем.
+- **Регистрация** и **получение токенов** доступны без авторизации.
+- **Создание/удаление курсов и уроков** — только авторизованные пользователи (НЕ модераторы).
+- **Редактирование курсов и уроков** — модератор ИЛИ владелец объекта.
+- **Удаление пользователей** и **управление платежами** — только админ (`is_staff`).
+- **Профиль пользователя** — любой авторизованный может смотреть чужой профиль, но редактировать только свой. 
+При просмотре чужого профиля история платежей скрыта (доп. задание*).
 
 ---
 
 ## 🧪 Тесты
 
-В проекте **39 unit-тестов** (`APITestCase`):
-
-**Курсы (6 тестов):**
-- Список и детальная для анонимов (200).
-- Запрет создания для анонимов (403).
-- Создание, обновление и удаление для авторизованных (201/200/204).
-
-**Сериализатор курса (3 теста):**
-- `lessons_count` возвращает корректное число (`SerializerMethodField`).
-- Вложенный `LessonSerializer` отдаёт список уроков курса.
-- Курс без уроков: `lessons_count=0`, `lessons=[]`.
-
-**Уроки (6 тестов):**
-- Список и детальная для анонимов (200).
-- Запрет создания для анонимов (403).
-- Создание, обновление и удаление для авторизованных (201/200/204).
-
-**Платежи (17 тестов):**
-- Список для анонимов (200), запрет создания для анонимов (403).
-- Запрет создания/изменения/удаления для обычного авторизованного (403).
-- Создание/изменение/удаление для админа (201/200/204).
-- Валидация: нельзя создать платёж и с курсом, и с уроком (400).
-- Валидация: нельзя создать платёж без курса и без урока (400).
-- Фильтр по пользователю (`?user=<id>`).
-- Фильтр по курсу (`?course=<id>`).
-- Фильтр по уроку (`?lesson=<id>`).
-- Фильтр по способу оплаты (`?payment_method=cash`).
-- Сортировка по дате: asc (`?ordering=payment_date`) и desc (`?ordering=-payment_date`).
-
-**Пользователи (6 тестов):**
-- Список для анонимов (200).
-- Запрет создания для анонимов (403).
-- Детальная с `payments` и `payments_count`.
-- Удаление: аноним — 403, обычный авторизованный — 403, админ — 204.
-
-**История платежей (1 тест):**
-- `UserSerializer` отдаёт `payments` и `payments_count` (доп. задание*).
+В проекте **52 unit-теста** (`APITestCase`), покрывающих:
+- Базовый CRUD для всех сущностей.
+- Права доступа (аноним, авторизованный, модератор, владелец, админ).
+- Валидацию платежей (ровно один из course/lesson).
+- Фильтрацию и сортировку.
+- JWT-аутентификацию и регистрацию.
+- Скрытие истории платежей для чужих профилей.
 
 **Для запуска:**
 
@@ -85,6 +61,7 @@ python manage.py test
 - **Python 3.12** — язык программирования.
 - **Django 6.1.3** — веб-фреймворк.
 - **Django REST Framework 3.18.3** — создание `REST API`.
+- **djangorestframework-simplejwt 5.5.1** — JWT-авторизация.
 - **django-filter 25.2** — фильтрация `queryset`.
 - **PostgreSQL 17** — база данных (через `psycopg2-binary`).
 - **Pillow** — работа с изображениями (превью, аватары).
@@ -158,20 +135,12 @@ python manage.py migrate
 ### 7. Загрузите фикстуру платежей:
 
 ```bash
+python manage.py loaddata groups
 python manage.py loaddata payments
 ```
-Фикстура лежит в `users/fixtures/payments.json` — 4 платежа (курсы, уроки, разные способы оплаты).
+Фикстура groups.json создаёт группу Moderator (для модераторов).
 
-**⚠️ Важно: фикстура ссылается на существующие `user_id`, `course_id`, `lesson_id`. 
-Перед загрузкой должны быть созданы:**
-
-- пользователи с `id`=1 и `id`=2 (см. креды в `README`)
-
-- курсы с `id`=1 и `id`=2
-
-- уроки с `id`=2 и `id`=4
-
-Если их нет — создайте вручную (через админку или `shell`) или загрузите свою фикстуру с ними.
+Фикстура payments.json создаёт 4 платежа (требует наличия пользователей, курсов и уроков с указанными ID).
 
 ### 8. Создайте суперпользователя (для админки):
 
@@ -198,6 +167,7 @@ python manage.py runserver
 Agro_Academy/
 ├── users/                  # Приложение пользователей и платежей
 │   ├── fixtures/
+│   │   ├── groups.json     # Фикстура группы Moderator
 │   │   └── payments.json   # Фикстура платежей (4 записи)
 │   ├── migrations/
 │   │   ├── 0001_initial.py
@@ -208,24 +178,27 @@ Agro_Academy/
 │   ├── apps.py
 │   ├── managers.py         # UserManager (создание по email)
 │   ├── models.py           # User (AbstractBaseUser), Payment (+ валидация)
-│   ├── serializers.py      # UserSerializer, PaymentSerializer (+ validate)
-│   ├── tests.py            # 24 теста (17 Payment + 6 UserViewSet + 1 история)
-│   ├── urls.py             # Роутер для UserViewSet, PaymentViewSet
+│   ├── permissions.py      # IsModerator, IsOwner, IsNotModerator, IsProfileOwner
+│   ├── serializers.py      # UserSerializer, PaymentSerializer, CustomToken...
+│   ├── tests.py            # 34 теста (JWT, регистрация, права, платежи)
+│   ├── urls.py             # Роутер + эндпоинты JWT
 │   └── views.py            # UserViewSet, PaymentViewSet (+ permissions)
 ├── materials/              # Приложение курсов и уроков
 │   ├── migrations/
-│   │   └── 0001_initial.py
+│   │   ├── 0001_initial.py
+│   │   ├── 0002_course_owner_lesson_owner.py
+│   │   └── 0003_alter_course_owner_alter_lesson_owner.py
 │   ├── admin.py            # CourseAdmin, LessonAdmin
 │   ├── apps.py
-│   ├── models.py           # Course, Lesson (FK)
+│   ├── models.py           # Course, Lesson (FK, owner)
 │   ├── serializers.py      # CourseSerializer, LessonSerializer
-│   ├── tests.py            # 15 тестов (6 Course + 6 Lesson + 3 Serializer)
+│   ├── tests.py            # 18 тестов (права модераторов и владельцев)
 │   ├── urls.py             # Роутер + Generic-классы
 │   └── views.py            # CourseViewSet, Lesson*APIView
 ├── config/                 # Настройки проекта
 │   ├── __init__.py
 │   ├── asgi.py
-│   ├── settings.py         # PostgreSQL, DRF, django-filter, .env
+│   ├── settings.py         # PostgreSQL, DRF, JWT, django-filter, .env
 │   ├── urls.py
 │   └── wsgi.py
 ├── .env                    # Переменные (не в git)
@@ -240,44 +213,41 @@ Agro_Academy/
 
 ## 🔗 Эндпоинты
 
-**Курсы (CourseViewSet):**
-- `GET /api/courses/` — список
-- `POST /api/courses/` — создать
-- `GET /api/courses/<id>/` — детальная
-- `PUT/PATCH /api/courses/<id>/` — обновить
-- `DELETE /api/courses/<id>/` — удалить
+### Авторизация
+- `POST /api/token/` — получить `access` и `refresh` токены (email + password).
+- `POST /api/token/refresh/` — обновить `access` токен.
 
-**Уроки (Generic):**
-- `GET /api/lessons/` — список
-- `POST /api/lessons/create/` — создать
-- `GET /api/lessons/<id>/` — детальная
-- `PUT/PATCH /api/lessons/<id>/update/` — обновить
-- `DELETE /api/lessons/<id>/delete/` — удалить
-
-**Пользователи (UserViewSet):**
+### Пользователи
 - `GET /api/users/` — список
-- `POST /api/users/` — создать
+- `POST /api/users/` — регистрация (доступно анонимам)
 - `GET /api/users/<id>/` — детальная
-- `PUT/PATCH /api/users/<id>/` — обновить профиль
-- `DELETE /api/users/<id>/` — удалить
+- `PUT/PATCH /api/users/<id>/` — обновить (только свой профиль)
+- `DELETE /api/users/<id>/` — удалить (только админ)
 
-**Платежи (PaymentViewSet):**
+### Курсы
+- `GET /api/courses/` — список
+- `POST /api/courses/` — создать (не модератор)
+- `GET /api/courses/<id>/` — детальная
+- `PUT/PATCH /api/courses/<id>/` — обновить (модератор или владелец)
+- `DELETE /api/courses/<id>/` — удалить (только владелец, не модератор)
+
+### Уроки
+- `GET /api/lessons/` — список
+- `POST /api/lessons/create/` — создать (не модератор)
+- `GET /api/lessons/<id>/` — детальная
+- `PUT/PATCH /api/lessons/<id>/update/` — обновить (модератор или владелец)
+- `DELETE /api/lessons/<id>/delete/` — удалить (только владелец, не модератор)
+
+### Платежи
 - `GET /api/payments/` — список
-- `POST /api/payments/` — создать
+- `POST /api/payments/` — создать (только админ)
 - `GET /api/payments/<id>/` — детальная
-- `PUT/PATCH /api/payments/<id>/` — обновить
-- `DELETE /api/payments/<id>/` — удалить
+- `PUT/PATCH /api/payments/<id>/` — обновить (только админ)
+- `DELETE /api/payments/<id>/` — удалить (только админ)
 
 **Фильтры для платежей:**
-- `?user=<id>` — по пользователю
-- `?course=<id>` — по курсу
-- `?lesson=<id>` — по уроку
-- `?payment_method=cash|transfer` — по способу оплаты
-- `?ordering=payment_date` — сортировка по возрастанию
-- `?ordering=-payment_date` — сортировка по убыванию
-
-**Админка:**
-- `/admin/` — админка Django
+- `?user=<id>`, `?course=<id>`, `?lesson=<id>`, `?payment_method=cash|transfer`
+- `?ordering=payment_date` / `?ordering=-payment_date`
 
 ---
 
@@ -291,8 +261,8 @@ Agro_Academy/
 - Валидация: ровно один из `course/lesson` (`CheckConstraint + clean()` + `serializer.validate()`).
 
 **Материалы**
-- `Course — title, preview, description, created_at.`
-- `Lesson — course (FK → Course), title, description, preview, video_url, created_at.`
+- `Course — title, preview, description, owner (FK, обязательное), created_at.`
+- `Lesson — course (FK → Course), title, description, preview, video_url, owner (FK, обязательное), created_at.`
 
 Для всех моделей заданы `Meta` (`verbose_name`, `verbose_name_plural`) и метод `__str__`.
 
