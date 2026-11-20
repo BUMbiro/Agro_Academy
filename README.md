@@ -186,7 +186,8 @@ Agro_Academy/
 ├── materials/              # Приложение курсов и уроков
 │   ├── migrations/
 │   │   ├── 0001_initial.py
-│   │   └── 0002_course_owner_lesson_owner.py
+│   │   ├── 0002_course_owner_lesson_owner.py
+│   │   └── 0003_alter_course_owner_alter_lesson_owner.py
 │   ├── admin.py            # CourseAdmin, LessonAdmin
 │   ├── apps.py
 │   ├── models.py           # Course, Lesson (FK, owner)
@@ -260,8 +261,8 @@ Agro_Academy/
 - Валидация: ровно один из `course/lesson` (`CheckConstraint + clean()` + `serializer.validate()`).
 
 **Материалы**
-- `Course — title, preview, description, owner (FK), created_at.`
-- `Lesson — course (FK → Course), title, description, preview, video_url, owner (FK), created_at.`
+- `Course — title, preview, description, owner (FK, обязательное), created_at.`
+- `Lesson — course (FK → Course), title, description, preview, video_url, owner (FK, обязательное), created_at.`
 
 Для всех моделей заданы `Meta` (`verbose_name`, `verbose_name_plural`) и метод `__str__`.
 
