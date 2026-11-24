@@ -1,0 +1,25 @@
+Name                       Stmts   Miss  Cover   Missing
+--------------------------------------------------------
+config\__init__.py             0      0   100%
+config\settings.py            37      1    97%   11
+config\urls.py                 3      0   100%
+materials\__init__.py          0      0   100%
+materials\admin.py            16      0   100%
+materials\apps.py              3      0   100%
+materials\models.py           40      3    92%   46, 94, 128
+materials\paginators.py        5      0   100%
+materials\serializers.py      37      1    97%   25
+materials\urls.py              6      0   100%
+materials\validators.py       12      0   100%
+materials\views.py            73      2    97%   32, 103
+users\__init__.py              0      0   100%
+users\admin.py                19      0   100%
+users\apps.py                  3      0   100%
+users\managers.py             19      3    84%   10, 25, 27
+users\models.py               44      6    86%   60, 130-132, 137-138
+users\permissions.py          29      5    83%   18, 27, 54-56
+users\serializers.py          51      1    98%   49
+users\urls.py                 11      0   100%
+users\views.py                28      1    96%   22
+--------------------------------------------------------
+TOTAL                        436     23    95%

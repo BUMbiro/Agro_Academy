@@ -1,34 +1,35 @@
 # Python
 __pycache__/
 *.py[cod]
-*.egg-info/
+*.so
+
+# Виртуальное окружение
 .venv/
 venv/
+env/
+
+# Переменные окружения (секреты)
+.env
 
 # Django
 *.log
 db.sqlite3
-/media/
-/staticfiles/
+media/
+staticfiles/
 
-# Env
-.env
-.env.local
-.env.*.local
+# Coverage: бинарные данные игнорируем,
+# а отчёты coverage.txt и htmlcov/ оставляем в репозитории
+.coverage
+.coverage.*
 
 # IDE
 .idea/
 .vscode/
-*.swp
+
+# ОС
 .DS_Store
+Thumbs.db
 
-# Redis
-dump.rdb
-
-# Вспомогательные файлы для общения с ИИ (дамперы)
-project_all.txt
+# Служебные файлы
 dump_project.py
-
-# Coverage
-.coverage
-htmlcov/
+project_all.txt

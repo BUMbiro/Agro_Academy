@@ -1,27 +1,32 @@
-import re
+from urllib.parse import urlparse
+
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
+
+# Название не ALLOWED_HOSTS, чтобы не путать с настройкой Django
+ALLOWED_YOUTUBE_HOSTS = {
+    'youtube.com',
+    'www.youtube.com',
+    'm.youtube.com',
+    'youtu.be',
+}
 
 
 def validate_youtube_url(value):
     """
-    Валидатор, который разрешает ссылки только на YouTube.
-    Поддерживает домены: youtube.com, www.youtube.com, youtu.be, m.youtube.com
+    Разрешает ссылки только на YouTube.
+    Хост сравнивается целиком с белым списком, поэтому адреса вида
+    youtube.com.example.com или youtube.com@evil.com не проходят.
     """
     if not value:
-        return value  # Пустые ссылки разрешены (blank=True)
+        return value  # пустые ссылки разрешены (blank=True)
 
-    # Регулярное выражение для проверки домена
-    youtube_regex = (
-        r'(https?://)?'  # Опциональный протокол
-        r'(www\.|m\.)?'  # Опциональный www или m
-        r'(youtube\.com|youtu\.be)'  # Домены
-        r'(/.*)?'  # Любой путь после домена
-    )
+    parsed = urlparse(value)
+    host = (parsed.hostname or '').lower()
 
-    if not re.match(youtube_regex, value):
+    if parsed.scheme not in ('http', 'https') or host not in ALLOWED_YOUTUBE_HOSTS:
         raise ValidationError(
-            _('Ссылка должна вести только на YouTube (youtube.com или youtu.be).'),
-            code='invalid_youtube_url'
+            _('Ссылка должна вести только на youtube.com или youtu.be.'),
+            code='invalid_youtube_url',
         )
     return value

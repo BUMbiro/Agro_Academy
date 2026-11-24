@@ -1,7 +1,7 @@
 # 👨‍🌾 Фермерская академия (AgroAcademy) 🎓
 
-**Фермерская академия** — это учебный REST API для образовательной платформы, созданный в рамках домашних 
-заданий по **Django REST Framework**.  
+**Фермерская академия** — учебный REST API для образовательной платформы, созданный в рамках домашних
+заданий по **Django REST Framework**.
 Проект позволяет создавать курсы и уроки для фермеров и агробизнеса (ФГИС, декларации, агрономия).
 
 ---
@@ -9,92 +9,128 @@
 ## 🚀 Функционал
 
 - **Пользователи** — CRUD через `ModelViewSet`, регистрация, редактирование профиля.
-- **Курсы** — CRUD через `ModelViewSet` (включая количество уроков и вложенный список).
+- **Курсы** — CRUD через `ModelViewSet` (количество уроков и вложенный список уроков).
 - **Уроки** — CRUD через `Generic`-классы (привязка к курсу, ссылка на видео).
 - **Платежи** — CRUD через `ModelViewSet` (фильтрация, сортировка, валидация).
 - **JWT-авторизация** — получение и обновление токенов (`access`/`refresh`).
-- **Роли** — модераторы (редактируют всё, но не создают/удаляют) и владельцы (управляют только своими объектами).
-- **Подписки** — возможность подписаться на обновления курса и отписаться от них.
-- **Валидация** — ссылки на видео принимаются только с YouTube (`youtube.com`, `youtu.be`).
-- **Пагинация** — кастомный пагинатор с настройками `page_size` и `max_page_size` для курсов и уроков.
-- **Оптимизация** — `select_related`, `prefetch_related` и `Prefetch` (для подписок) для избежания N+1 запросов.
+- **Роли** — модераторы (видят и редактируют всё, но не создают и не удаляют) и владельцы 
+(работают только со своими объектами).
+- **Подписки** — подписка на обновления курса и отписка от них (поле `is_subscribed` в курсе).
+- **Валидация** — ссылки на видео принимаются только с YouTube (проверка хоста по белому списку).
+- **Пагинация** — кастомный пагинатор (`page_size`, `page_size_query_param`, `max_page_size`) для курсов и уроков.
+- **Оптимизация** — `select_related`, `prefetch_related` и `Prefetch` (для подписок) против N+1 запросов.
 - **Связи** — Урок → FK → Курс (`related_name='lessons'`), Платёж → FK → Пользователь/Курс/Урок.
 
 ---
 
-## 🔒 Безопасность
+## 🔒 Права доступа
 
-- **Аноним** может **читать** (GET) курсы, уроки, пользователей, платежи.
-- **Регистрация** и **получение токенов** доступны без авторизации.
-- **Создание/удаление курсов и уроков** — только авторизованные пользователи (НЕ модераторы).
-- **Редактирование курсов и уроков** — модератор ИЛИ владелец объекта.
-- **Удаление пользователей** и **управление платежами** — только админ (`is_staff`).
-- **Профиль пользователя** — любой авторизованный может смотреть чужой профиль, но редактировать только свой. 
-При просмотре чужого профиля история платежей скрыта (доп. задание*).
+### Курсы и уроки
+
+| Действие | Кто может |
+|---|---|
+| Любой запрос анонима | ❌ никто (401) |
+| Список (`GET /courses/`, `GET /lessons/`) | владелец видит **только свои**, модератор видит **все** |
+| Детальный просмотр | владелец или модератор (иначе 403) |
+| Создание | авторизованный, **не модератор** |
+| Редактирование | владелец или модератор |
+| Удаление | только владелец (модератор не может) |
+| Подписка / отписка | любой авторизованный, в том числе на чужой курс |
+
+- Урок можно добавить только в **свой** курс (иначе 400).
+- Ссылка на видео: хост сравнивается с белым списком (`youtube.com`, `www.youtube.com`, `m.youtube.com`, `youtu.be`).
+  Адреса вида `youtube.com.example.com` или `youtube.com@evil.com` отклоняются.
+
+### Пользователи и платежи
+- **Регистрация** (`POST /api/users/`) и **получение токенов** доступны без авторизации.
+- **Профиль**: просматривать можно любой, редактировать только свой (админ может любой).
+  История платежей в чужом профиле скрыта.
+- **Удаление пользователей** — только админ (`is_staff`).
+- **Платежи**: просмотр доступен всем, создание, изменение и удаление — только админу.
 
 ---
 
 ## 🧪 Тесты
 
-В проекте **65 unit-тестов** (`APITestCase`), покрывающих:
-- Базовый CRUD для всех сущностей.
-- Права доступа (аноним, авторизованный, модератор, владелец, админ).
-- Валидацию платежей и YouTube-ссылок (для курсов и уроков).
-- Фильтрацию, сортировку и пагинацию.
-- JWT-аутентификацию и регистрацию.
-- Управление подписками (создание, удаление, проверка статуса `is_subscribed`).
-- Запрет на добавление урока в чужой курс.
+В проекте **89 тестов** (`APITestCase` + `SimpleTestCase`), они покрывают:
+- базовый CRUD для всех сущностей;
+- права доступа (аноним, владелец, чужой пользователь, модератор, админ);
+- фильтрацию списков: свои объекты и все объекты для модератора;
+- запрет просмотра чужих курсов и уроков;
+- валидацию YouTube-ссылок, включая поддельные домены (`youtube.com.example.com`);
+- валидацию платежей (ровно один из курс/урок);
+- фильтрацию и сортировку платежей;
+- JWT: получение, обновление и использование токена, регистрацию;
+- подписки (создание, повтор, отписка, `is_subscribed` в списке и детальной);
+- запрет добавления урока в чужой курс.
 
-**Покрытие тестами (Coverage): 94%.** HTML-отчёт находится в папке `htmlcov/index.html`.
-
-**Для запуска:**
+**Запуск:**
 
 ```bash
 python manage.py test
 ```
 
-Все тесты — **OK**.
+### 📊 Покрытие (Coverage): **95%**
+
+Готовые отчёты лежат в репозитории:
+- `coverage.txt` — текстовый отчёт;
+- `htmlcov/index.html` — HTML-отчёт.
+
+Пересобрать отчёты:
+
+```bash
+coverage run --source=. manage.py test
+coverage report -m > coverage.txt      # cmd / bash
+coverage html
+```
+
+> В PowerShell используйте `coverage report -m | Set-Content -Encoding ascii coverage.txt`,
+> иначе файл сохранится в UTF-16.
+
+> Миграции, тесты, `manage.py`, `asgi.py` и `wsgi.py` исключены из подсчёта (см. `.coveragerc`).
 
 ---
 
 ## 🛠 Технологический стек
 
-- **Python 3.12** — язык программирования.
-- **Django 6.1.3** — веб-фреймворк.
-- **Django REST Framework 3.18.3** — создание `REST API`.
-- **djangorestframework-simplejwt 5.5.1** — JWT-авторизация.
-- **django-filter 25.2** — фильтрация `queryset`.
-- **coverage 7.5.1** — анализ покрытия тестами.
-- **PostgreSQL 17** — база данных (через `psycopg2-binary`).
-- **Pillow** — работа с изображениями (превью, аватары).
-- **python-dotenv** — чтение `.env` (свой парсер в `settings.py`).
+- **Python 3.12**
+- **Django 6.1.3**
+- **Django REST Framework 3.18.3**
+- **djangorestframework-simplejwt 5.5.1** — JWT-авторизация
+- **django-filter 25.2** — фильтрация `queryset`
+- **coverage 7.5.1** — анализ покрытия тестами
+- **PostgreSQL 17** — база данных (через `psycopg2-binary`)
+- **Pillow** — изображения (превью, аватары)
+- Чтение `.env` — собственный мини-парсер в `config/settings.py`
 
 ---
 
 ## 📦 Установка и запуск
 
-### 1. Клонируйте репозиторий:
+### 1. Клонируйте репозиторий
 
 ```bash
 git clone https://github.com/BUMbiro/Agro_Academy.git
 cd Agro_Academy
 ```
 
-### 2. Создайте и активируйте виртуальное окружение:
+### 2. Создайте и активируйте виртуальное окружение
+
 ```bash
 python -m venv .venv
-.venv\Scripts\activate      # Windows
-# source .venv/bin/activate  # macOS/Linux
+.venv\Scripts\activate        # Windows
+# source .venv/bin/activate   # macOS/Linux
 ```
 
-### 3. Установите зависимости:
+### 3. Установите зависимости
+
 ```bash
 pip install -r requirements.txt
 ```
 
 ### 4. Создайте базу данных PostgreSQL
 
-**В psql под суперпользователем postgres:**
+В `psql` под суперпользователем `postgres`:
 
 ```sql
 CREATE USER agro_academy_user WITH PASSWORD 'ваш_пароль';
@@ -102,9 +138,9 @@ ALTER USER agro_academy_user CREATEDB;
 CREATE DATABASE agro_academy WITH OWNER = agro_academy_user ENCODING = 'UTF8';
 ```
 
-### 5. Настройте переменные окружения
+> Право `CREATEDB` нужно, чтобы `python manage.py test` мог создать тестовую БД.
 
-**Скопируйте .env.template в .env и заполните:**
+### 5. Настройте переменные окружения
 
 ```bash
 cp .env.template .env    # Windows: copy .env.template .env
@@ -125,91 +161,87 @@ DB_HOST=localhost
 DB_PORT=5432
 ```
 
->.env добавлен в .gitignore — реальные пароли в репозиторий не попадают.
->В .env.template только заглушки.
+> `.env` добавлен в `.gitignore`, поэтому реальные пароли в репозиторий не попадают.
+> В `.env.template` только заглушки.
 
-### 6. Выполните миграции:
+### 6. Выполните миграции
 
 ```bash
 python manage.py migrate
 ```
 
-### 7. Загрузите фикстуру платежей:
+### 7. Загрузите фикстуры
 
 ```bash
 python manage.py loaddata groups
 python manage.py loaddata payments
 ```
-Фикстура groups.json создаёт группу Moderator (для модераторов).
 
-Фикстура payments.json создаёт 4 платежа (требует наличия пользователей, курсов и уроков с указанными ID).
+- `groups.json` создаёт группу **Moderator**. Чтобы сделать пользователя модератором, добавьте его в эту группу через 
+админку.
+- `payments.json` создаёт 4 платежа. Для него в базе уже должны быть пользователи с ID 1–2, курсы с ID 1–2 и уроки 
+с ID 2 и 4.
 
-### 8. Создайте суперпользователя (для админки):
+### 8. Создайте суперпользователя
 
 ```bash
 python manage.py createsuperuser
 ```
 
->Важно: `Django` спросит `Email` (а не `username`), потому что используется кастомная модель `User` с 
->`USERNAME_FIELD = 'email'`.
+> Django спросит **Email** (а не `username`): в кастомной модели `User` задано `USERNAME_FIELD = 'email'`.
 
-### 9. Запустите сервер:
+### 9. Запустите сервер
+
 ```bash
 python manage.py runserver
 ```
 
-**Откройте браузер (DRF Browsable API):**
+API: 👉 http://127.0.0.1:8000/api/
 
-### 👉 http://127.0.0.1:8000/api/courses/
+> Для запросов к курсам и урокам нужен заголовок `Authorization: Bearer <access_token>`.
 
 ---
 
 ## 📁 Структура проекта
+
 ```text
 Agro_Academy/
-├── users/                  # Приложение пользователей и платежей
+├── users/                  # Пользователи и платежи
 │   ├── fixtures/
-│   │   ├── groups.json     # Фикстура группы Moderator
-│   │   └── payments.json   # Фикстура платежей (4 записи)
+│   │   ├── groups.json     # Группа Moderator
+│   │   └── payments.json   # 4 тестовых платежа
 │   ├── migrations/
-│   │   ├── 0001_initial.py
-│   │   ├── 0002_payment.py
-│   │   ├── 0003_alter_user_options.py
-│   │   └── 0004_payment_payment_course_xor_lesson.py
 │   ├── admin.py            # UserAdmin, PaymentAdmin
 │   ├── apps.py
 │   ├── managers.py         # UserManager (создание по email)
-│   ├── models.py           # User (AbstractBaseUser), Payment (+ валидация)
-│   ├── permissions.py      # IsModerator, IsOwner, IsNotModerator, IsProfileOwner
-│   ├── serializers.py      # UserSerializer, PaymentSerializer, CustomToken...
-│   ├── tests.py            # 25 тестов (JWT, регистрация, права, платежи)
+│   ├── models.py           # User (AbstractBaseUser), Payment (+ CheckConstraint)
+│   ├── permissions.py      # is_moderator, IsModerator, IsNotModerator, IsOwner,
+│   │                       # IsOwnerOrModerator, IsProfileOwner
+│   ├── serializers.py      # UserSerializer, PaymentSerializer, CustomTokenObtainPairSerializer
+│   ├── tests.py            # 30 тестов (JWT, регистрация, права, платежи)
 │   ├── urls.py             # Роутер + эндпоинты JWT
-│   └── views.py            # UserViewSet, PaymentViewSet (+ permissions)
-├── materials/              # Приложение курсов и уроков
+│   └── views.py            # UserViewSet, PaymentViewSet
+├── materials/              # Курсы, уроки, подписки
 │   ├── migrations/
-│   │   ├── 0001_initial.py
-│   │   ├── 0002_course_owner_lesson_owner.py
-│   │   ├── 0003_alter_course_owner_alter_lesson_owner.py
-│   │   └── 0004_course_video_url_alter_lesson_video_url_subscription.py
 │   ├── admin.py            # CourseAdmin, LessonAdmin
 │   ├── apps.py
 │   ├── models.py           # Course, Lesson, Subscription
-│   ├── paginators.py       # CustomPagination (Задание 3)
-│   ├── serializers.py      # CourseSerializer, LessonSerializer
-│   ├── tests.py            # 40 тестов (CRUD, права, YouTube, подписки, валидация)
+│   ├── paginators.py       # CustomPagination
+│   ├── serializers.py      # CourseSerializer (is_subscribed), LessonSerializer
+│   ├── tests.py            # 59 тестов (CRUD, права, YouTube, подписки, валидация)
 │   ├── urls.py             # Роутер + Generic-классы
-│   ├── validators.py       # Валидатор YouTube-ссылок (Задание 1)
-│   └── views.py            # CourseViewSet, Lesson*APIView
+│   ├── validators.py       # validate_youtube_url (urlparse + белый список)
+│   └── views.py            # CourseViewSet (+ subscribe), Lesson*APIView
 ├── config/                 # Настройки проекта
-│   ├── __init__.py
-│   ├── asgi.py
 │   ├── settings.py         # PostgreSQL, DRF, JWT, django-filter, .env
 │   ├── urls.py
+│   ├── asgi.py
 │   └── wsgi.py
-├── .coveragerc             # Настройки Coverage
-├── .env                    # Переменные (не в git)
-├── .env.template           # Шаблон .env
+├── htmlcov/                # HTML-отчёт покрытия
+├── .coveragerc             # Настройки coverage
+├── .env.template           # Шаблон переменных окружения
 ├── .gitignore
+├── coverage.txt            # Текстовый отчёт покрытия
 ├── manage.py
 ├── README.md
 └── requirements.txt
@@ -220,81 +252,82 @@ Agro_Academy/
 ## 🔗 Эндпоинты
 
 ### Авторизация
-- `POST /api/token/` — получить `access` и `refresh` токены (email + password).
-- `POST /api/token/refresh/` — обновить `access` токен.
+- `POST /api/token/` — получить `access` и `refresh` (email + password)
+- `POST /api/token/refresh/` — обновить `access`
 
 ### Пользователи
 - `GET /api/users/` — список
-- `POST /api/users/` — регистрация (доступно анонимам)
-- `GET /api/users/<id>/` — детальная
+- `POST /api/users/` — регистрация (без авторизации)
+- `GET /api/users/<id>/` — профиль (платежи видны только владельцу и админу)
 - `PUT/PATCH /api/users/<id>/` — обновить (только свой профиль)
 - `DELETE /api/users/<id>/` — удалить (только админ)
 
 ### Курсы
-- `GET /api/courses/` — список
+- `GET /api/courses/` — список (свои; модератор видит все)
 - `POST /api/courses/` — создать (не модератор)
-- `GET /api/courses/<id>/` — детальная
-- `PUT/PATCH /api/courses/<id>/` — обновить (модератор или владелец)
-- `DELETE /api/courses/<id>/` — удалить (только владелец, не модератор)
-- `POST /api/courses/<id>/subscribe/` — подписаться на курс
-- `DELETE /api/courses/<id>/subscribe/` — отписаться от курса
+- `GET /api/courses/<id>/` — детальная (владелец или модератор)
+- `PUT/PATCH /api/courses/<id>/` — обновить (владелец или модератор)
+- `DELETE /api/courses/<id>/` — удалить (только владелец)
+- `POST /api/courses/<id>/subscribe/` — подписаться (любой авторизованный)
+- `DELETE /api/courses/<id>/subscribe/` — отписаться
 
 ### Уроки
-- `GET /api/lessons/` — список
-- `POST /api/lessons/create/` — создать (не модератор)
-- `GET /api/lessons/<id>/` — детальная
-- `PUT/PATCH /api/lessons/<id>/update/` — обновить (модератор или владелец)
-- `DELETE /api/lessons/<id>/delete/` — удалить (только владелец, не модератор)
+- `GET /api/lessons/` — список (свои; модератор видит все)
+- `POST /api/lessons/create/` — создать в своём курсе (не модератор)
+- `GET /api/lessons/<id>/` — детальная (владелец или модератор)
+- `PUT/PATCH /api/lessons/<id>/update/` — обновить (владелец или модератор)
+- `DELETE /api/lessons/<id>/delete/` — удалить (только владелец)
 
 ### Платежи
 - `GET /api/payments/` — список
-- `POST /api/payments/` — создать (только админ)
 - `GET /api/payments/<id>/` — детальная
+- `POST /api/payments/` — создать (только админ)
 - `PUT/PATCH /api/payments/<id>/` — обновить (только админ)
 - `DELETE /api/payments/<id>/` — удалить (только админ)
 
-**Фильтры для платежей:**
+**Фильтры и сортировка платежей:**
 - `?user=<id>`, `?course=<id>`, `?lesson=<id>`, `?payment_method=cash|transfer`
 - `?ordering=payment_date` / `?ordering=-payment_date`
+
+**Пагинация курсов и уроков:** `?page=<n>&page_size=<n>` (по умолчанию 10, максимум 50).
 
 ---
 
 ## 🗄 Модели
 
 **Пользователи**
-- `User (AbstractBaseUser) — email (USERNAME_FIELD), password, phone, city, avatar, is_active, is_staff, date_joined.`
+- `User (AbstractBaseUser)` — email (`USERNAME_FIELD`), password, phone, city, avatar, is_active, is_staff, date_joined.
 
 **Платежи**
-- `Payment — user (FK), payment_date, course (FK, null), lesson (FK, null), amount, payment_method (cash/transfer).`
-- Валидация: ровно один из `course/lesson` (`CheckConstraint + clean()` + `serializer.validate()`).
+- `Payment` — user (FK), payment_date, course (FK, null), lesson (FK, null), amount, payment_method (cash/transfer).
+- Валидация: ровно один из `course`/`lesson` (`CheckConstraint` + `clean()` + `serializer.validate()`).
 
 **Материалы**
-- `Course — title, preview, description, video_url, owner (FK, обязательное), created_at.`
-- `Lesson — course (FK → Course), title, description, preview, video_url, owner (FK, обязательное), created_at.`
-- `Subscription — user (FK), course (FK), created_at. Уникальность пары (user, course).`
+- `Course` — title, preview, description, video_url, owner (FK), created_at.
+- `Lesson` — course (FK → Course), title, description, preview, video_url, owner (FK), created_at.
+- `Subscription` — user (FK), course (FK), created_at. Пара (user, course) уникальна.
 
-Для всех моделей заданы `Meta` (`verbose_name`, `verbose_name_plural`) и метод `__str__`.
+Для всех моделей заданы `Meta` (`verbose_name`, `verbose_name_plural`) и `__str__`.
 
 ---
 
 ## 🧪 Проверка через Postman
 
-Все эндпоинты проверены через **Postman**:
-- ✅ GET, POST, PUT/PATCH, DELETE для курсов.
-- ✅ GET, POST, PUT/PATCH, DELETE для уроков.
-- ✅ GET, POST, PUT/PATCH, DELETE для пользователей.
-- ✅ GET, POST, PUT/PATCH, DELETE для платежей.
-- ✅ Фильтры: `?course=`, `?lesson=`, `?payment_method=`.
-- ✅ Сортировка: `?ordering=payment_date`, `?ordering=-payment_date`.
+- ✅ CRUD для курсов, уроков, пользователей и платежей
+- ✅ JWT: получение и обновление токенов, запросы с `Bearer`
+- ✅ Права: владелец, чужой пользователь, модератор, админ
+- ✅ Подписка и отписка на курс
+- ✅ Фильтры `?course=`, `?lesson=`, `?payment_method=`, `?user=`
+- ✅ Сортировка `?ordering=payment_date` / `-payment_date`
 
 ---
 
 ## 👨‍🌾 Об авторе
 
-Александр **(BUMbiro)** — студент курса **Python-разработки**.  
+Александр **(BUMbiro)** — студент курса **Python-разработки**.
 Проект создан в рамках домашних заданий по **Django REST Framework**.
 
-**Стек:** Django · DRF · django-filter · PostgreSQL · Pillow
+**Стек:** Django · DRF · SimpleJWT · django-filter · PostgreSQL · Pillow
 
 ---
 

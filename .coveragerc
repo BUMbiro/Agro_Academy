@@ -1,9 +1,14 @@
 [run]
+source = .
 omit =
     */migrations/*
     */tests.py
+    .venv/*
+    venv/*
     manage.py
-    dump_project.py
     config/asgi.py
     config/wsgi.py
-    */__init__.py
+    dump_project.py
+
+[report]
+show_missing = True

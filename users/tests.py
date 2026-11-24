@@ -345,3 +345,43 @@ class UserPaymentsHistoryTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertNotIn('payments', response.data)
         self.assertNotIn('payments_count', response.data)
+
+
+class JWTAuthTests(APITestCase):
+    """Тесты JWT: получение, обновление и использование токена."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(email='jwt@agroacademy.local', password='test12345')
+
+    def _obtain(self, password='test12345'):
+        return self.client.post(
+            reverse('token_obtain_pair'),
+            {'email': 'jwt@agroacademy.local', 'password': password},
+        )
+
+    def test_obtain_token_pair(self):
+        """По email и паролю выдаются access и refresh (200)."""
+        response = self._obtain()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('access', response.data)
+        self.assertIn('refresh', response.data)
+
+    def test_obtain_token_wrong_password(self):
+        """С неверным паролем токен не выдаётся (401)."""
+        response = self._obtain(password='wrong-password')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_refresh_token(self):
+        """По refresh выдаётся новый access (200)."""
+        refresh = self._obtain().data['refresh']
+        response = self.client.post(reverse('token_refresh'), {'refresh': refresh})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('access', response.data)
+
+    def test_access_with_bearer_token(self):
+        """С заголовком Bearer открывается защищённый эндпоинт (200)."""
+        access = self._obtain().data['access']
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access}')
+        response = self.client.get(reverse('course-list'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
