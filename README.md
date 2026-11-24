@@ -14,13 +14,11 @@
 - **Платежи** — CRUD через `ModelViewSet` (фильтрация, сортировка, валидация).
 - **JWT-авторизация** — получение и обновление токенов (`access`/`refresh`).
 - **Роли** — модераторы (редактируют всё, но не создают/удаляют) и владельцы (управляют только своими объектами).
-- **Связи** — Урок → FK → Курс (`related_name='lessons'`), Платёж → FK → Пользователь/Курс/Урок. Курсы и уроки имеют
-владельца (`owner`).
-- **Оптимизация** — `select_related` и `prefetch_related` для избежания N+1 запросов.
-- **Сериализаторы** — `ModelSerializer` для всех моделей, `SerializerMethodField` для подсчёта уроков и платежей.
-- **Пагинация** — `PageNumberPagination` (по 10 записей).
-- **Фильтрация** — `DjangoFilterBackend` (по курсу, уроку, способу оплаты).
-- **Сортировка** — `OrderingFilter` (по дате оплаты, asc/desc).
+- **Подписки** — возможность подписаться на обновления курса и отписаться от них.
+- **Валидация** — ссылки на видео принимаются только с YouTube (`youtube.com`, `youtu.be`).
+- **Пагинация** — кастомный пагинатор с настройками `page_size` и `max_page_size` для курсов и уроков.
+- **Оптимизация** — `select_related`, `prefetch_related` и `Prefetch` (для подписок) для избежания N+1 запросов.
+- **Связи** — Урок → FK → Курс (`related_name='lessons'`), Платёж → FK → Пользователь/Курс/Урок.
 
 ---
 
@@ -38,13 +36,16 @@
 
 ## 🧪 Тесты
 
-В проекте **52 unit-теста** (`APITestCase`), покрывающих:
+В проекте **65 unit-тестов** (`APITestCase`), покрывающих:
 - Базовый CRUD для всех сущностей.
 - Права доступа (аноним, авторизованный, модератор, владелец, админ).
-- Валидацию платежей (ровно один из course/lesson).
-- Фильтрацию и сортировку.
+- Валидацию платежей и YouTube-ссылок (для курсов и уроков).
+- Фильтрацию, сортировку и пагинацию.
 - JWT-аутентификацию и регистрацию.
-- Скрытие истории платежей для чужих профилей.
+- Управление подписками (создание, удаление, проверка статуса `is_subscribed`).
+- Запрет на добавление урока в чужой курс.
+
+**Покрытие тестами (Coverage): 94%.** HTML-отчёт находится в папке `htmlcov/index.html`.
 
 **Для запуска:**
 
@@ -63,6 +64,7 @@ python manage.py test
 - **Django REST Framework 3.18.3** — создание `REST API`.
 - **djangorestframework-simplejwt 5.5.1** — JWT-авторизация.
 - **django-filter 25.2** — фильтрация `queryset`.
+- **coverage 7.5.1** — анализ покрытия тестами.
 - **PostgreSQL 17** — база данных (через `psycopg2-binary`).
 - **Pillow** — работа с изображениями (превью, аватары).
 - **python-dotenv** — чтение `.env` (свой парсер в `settings.py`).
@@ -180,20 +182,23 @@ Agro_Academy/
 │   ├── models.py           # User (AbstractBaseUser), Payment (+ валидация)
 │   ├── permissions.py      # IsModerator, IsOwner, IsNotModerator, IsProfileOwner
 │   ├── serializers.py      # UserSerializer, PaymentSerializer, CustomToken...
-│   ├── tests.py            # 34 теста (JWT, регистрация, права, платежи)
+│   ├── tests.py            # 25 тестов (JWT, регистрация, права, платежи)
 │   ├── urls.py             # Роутер + эндпоинты JWT
 │   └── views.py            # UserViewSet, PaymentViewSet (+ permissions)
 ├── materials/              # Приложение курсов и уроков
 │   ├── migrations/
 │   │   ├── 0001_initial.py
 │   │   ├── 0002_course_owner_lesson_owner.py
-│   │   └── 0003_alter_course_owner_alter_lesson_owner.py
+│   │   ├── 0003_alter_course_owner_alter_lesson_owner.py
+│   │   └── 0004_course_video_url_alter_lesson_video_url_subscription.py
 │   ├── admin.py            # CourseAdmin, LessonAdmin
 │   ├── apps.py
-│   ├── models.py           # Course, Lesson (FK, owner)
+│   ├── models.py           # Course, Lesson, Subscription
+│   ├── paginators.py       # CustomPagination (Задание 3)
 │   ├── serializers.py      # CourseSerializer, LessonSerializer
-│   ├── tests.py            # 18 тестов (права модераторов и владельцев)
+│   ├── tests.py            # 40 тестов (CRUD, права, YouTube, подписки, валидация)
 │   ├── urls.py             # Роутер + Generic-классы
+│   ├── validators.py       # Валидатор YouTube-ссылок (Задание 1)
 │   └── views.py            # CourseViewSet, Lesson*APIView
 ├── config/                 # Настройки проекта
 │   ├── __init__.py
@@ -201,6 +206,7 @@ Agro_Academy/
 │   ├── settings.py         # PostgreSQL, DRF, JWT, django-filter, .env
 │   ├── urls.py
 │   └── wsgi.py
+├── .coveragerc             # Настройки Coverage
 ├── .env                    # Переменные (не в git)
 ├── .env.template           # Шаблон .env
 ├── .gitignore
@@ -230,6 +236,8 @@ Agro_Academy/
 - `GET /api/courses/<id>/` — детальная
 - `PUT/PATCH /api/courses/<id>/` — обновить (модератор или владелец)
 - `DELETE /api/courses/<id>/` — удалить (только владелец, не модератор)
+- `POST /api/courses/<id>/subscribe/` — подписаться на курс
+- `DELETE /api/courses/<id>/subscribe/` — отписаться от курса
 
 ### Уроки
 - `GET /api/lessons/` — список
@@ -261,8 +269,9 @@ Agro_Academy/
 - Валидация: ровно один из `course/lesson` (`CheckConstraint + clean()` + `serializer.validate()`).
 
 **Материалы**
-- `Course — title, preview, description, owner (FK, обязательное), created_at.`
+- `Course — title, preview, description, video_url, owner (FK, обязательное), created_at.`
 - `Lesson — course (FK → Course), title, description, preview, video_url, owner (FK, обязательное), created_at.`
+- `Subscription — user (FK), course (FK), created_at. Уникальность пары (user, course).`
 
 Для всех моделей заданы `Meta` (`verbose_name`, `verbose_name_plural`) и метод `__str__`.
 

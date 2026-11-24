@@ -28,3 +28,7 @@ dump.rdb
 # Вспомогательные файлы для общения с ИИ (дамперы)
 project_all.txt
 dump_project.py
+
+# Coverage
+.coverage
+htmlcov/
