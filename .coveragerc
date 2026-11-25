@@ -1,14 +1,19 @@
 [run]
 source = .
 omit =
-    */migrations/*
+    */test_*.py
     */tests.py
+    */migrations/*
     .venv/*
     venv/*
     manage.py
     config/asgi.py
     config/wsgi.py
+    check_db.py
     dump_project.py
 
 [report]
 show_missing = True
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
