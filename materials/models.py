@@ -1,4 +1,7 @@
+from decimal import Decimal
+
 from django.conf import settings
+from django.core.validators import MinValueValidator
 from django.db import models
 
 from .validators import validate_youtube_url
@@ -26,6 +29,14 @@ class Course(models.Model):
         verbose_name='Ссылка на видео',
         validators=[validate_youtube_url],
     )
+    price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name='Цена, ₽',
+        help_text='Стоимость в рублях. 0 — бесплатно (онлайн-оплата недоступна).',
+    )
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -41,9 +52,17 @@ class Course(models.Model):
         verbose_name = 'Курс'
         verbose_name_plural = 'Курсы'
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['owner', '-created_at'], name='course_owner_created_idx'),
+        ]
 
     def __str__(self):
         return self.title
+
+    @property
+    def is_paid(self):
+        """Есть ли у курса цена, пригодная для онлайн-оплаты."""
+        return self.price > 0
 
 
 class Lesson(models.Model):
@@ -74,6 +93,14 @@ class Lesson(models.Model):
         verbose_name='Ссылка на видео',
         validators=[validate_youtube_url],
     )
+    price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name='Цена, ₽',
+        help_text='Стоимость отдельного урока в рублях. 0 — бесплатно.',
+    )
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -89,13 +116,22 @@ class Lesson(models.Model):
         verbose_name = 'Урок'
         verbose_name_plural = 'Уроки'
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['owner', '-created_at'], name='lesson_owner_created_idx'),
+        ]
 
     def __str__(self):
         return f'{self.course.title} — {self.title}'
 
+    @property
+    def is_paid(self):
+        """Есть ли у урока цена, пригодная для онлайн-оплаты."""
+        return self.price > 0
+
 
 class Subscription(models.Model):
     """Подписка пользователя на обновления курса."""
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -120,8 +156,11 @@ class Subscription(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=['user', 'course'],
-                name='unique_user_course_subscription'
-            )
+                name='unique_user_course_subscription',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['user', 'course'], name='subscription_user_course_idx'),
         ]
 
     def __str__(self):
