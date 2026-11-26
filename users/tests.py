@@ -13,7 +13,7 @@ User = get_user_model()
 
 
 class PaymentAPITests(APITestCase):
-    """Тесты для PaymentViewSet: CRUD, фильтры, сортировка, права, валидация."""
+    """PaymentViewSet: права, CRUD, фильтры, сортировка, валидация."""
 
     @classmethod
     def setUpTestData(cls):
@@ -29,7 +29,6 @@ class PaymentAPITests(APITestCase):
             email='admin-test@agroacademy.local',
             password='test12345',
         )
-        # Добавили владельца при создании курсов и уроков
         cls.course1 = Course.objects.create(title='Курс 1', owner=cls.user1)
         cls.course2 = Course.objects.create(title='Курс 2', owner=cls.user2)
         cls.lesson1 = Lesson.objects.create(course=cls.course1, title='Урок 1', owner=cls.user1)
@@ -41,188 +40,204 @@ class PaymentAPITests(APITestCase):
             course=cls.course1,
             amount='5000.00',
             payment_method=Payment.PaymentMethod.TRANSFER,
+            status=Payment.Status.PAID,
         )
         cls.payment2 = Payment.objects.create(
             user=cls.user1,
             lesson=cls.lesson1,
             amount='1500.00',
             payment_method=Payment.PaymentMethod.CASH,
+            status=Payment.Status.PAID,
         )
         cls.payment3 = Payment.objects.create(
             user=cls.user2,
             course=cls.course2,
             amount='3000.00',
             payment_method=Payment.PaymentMethod.TRANSFER,
+            status=Payment.Status.PAID,
         )
         Payment.objects.filter(pk=cls.payment1.pk).update(payment_date=now - timedelta(days=2))
         Payment.objects.filter(pk=cls.payment2.pk).update(payment_date=now - timedelta(days=1))
         Payment.objects.filter(pk=cls.payment3.pk).update(payment_date=now)
-        cls.payment1.refresh_from_db()
-        cls.payment2.refresh_from_db()
-        cls.payment3.refresh_from_db()
+        for payment in (cls.payment1, cls.payment2, cls.payment3):
+            payment.refresh_from_db()
 
-    def test_list_payments_anonymous(self):
-        """Аноним может смотреть список платежей (200)."""
-        url = reverse('payment-list')
-        response = self.client.get(url)
+    def _payload(self, **extra):
+        """Данные для ручного создания платежа (только админ)."""
+        data = {
+            'user': self.user1.id,
+            'course': self.course1.id,
+            'amount': '1000.00',
+            'payment_method': 'cash',
+        }
+        data.update(extra)
+        return data
+
+    # --- Просмотр ---
+
+    def test_list_payments_anonymous_unauthorized(self):
+        """Аноним не видит список платежей (401)."""
+        response = self.client.get(reverse('payment-list'))
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_list_payments_user_sees_only_own(self):
+        """Пользователь видит только свои платежи."""
+        self.client.force_authenticate(user=self.user1)
+        response = self.client.get(reverse('payment-list'))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['count'], 2)
+        ids = {p['id'] for p in response.data['results']}
+        self.assertEqual(ids, {self.payment1.id, self.payment2.id})
+
+    def test_list_payments_admin_sees_all(self):
+        """Админ видит все платежи."""
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get(reverse('payment-list'))
         self.assertEqual(response.data['count'], 3)
+
+    def test_retrieve_own_payment(self):
+        """Детальная своего платежа (200)."""
+        self.client.force_authenticate(user=self.user1)
+        response = self.client.get(reverse('payment-detail', args=[self.payment1.id]))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['amount'], '5000.00')
+        self.assertEqual(response.data['course_title'], 'Курс 1')
+
+    def test_retrieve_foreign_payment_not_found(self):
+        """Чужой платёж не виден (404, а не 403 — не раскрываем существование)."""
+        self.client.force_authenticate(user=self.user2)
+        response = self.client.get(reverse('payment-detail', args=[self.payment1.id]))
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    # --- Создание ---
 
     def test_create_payment_anonymous_forbidden(self):
         """Аноним не может создать платёж (401)."""
-        url = reverse('payment-list')
-        data = {
-            'user': self.user1.id,
-            'course': self.course1.id,
-            'amount': '1000.00',
-            'payment_method': 'cash',
-        }
-        response = self.client.post(url, data)
+        response = self.client.post(reverse('payment-list'), self._payload())
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_create_payment_authenticated_forbidden(self):
-        """Обычный авторизованный не может создать платёж (403)."""
+        """Обычный пользователь не может создать платёж (403)."""
         self.client.force_authenticate(user=self.user1)
-        url = reverse('payment-list')
-        data = {
-            'user': self.user1.id,
-            'course': self.course1.id,
-            'amount': '1000.00',
-            'payment_method': 'cash',
-        }
-        response = self.client.post(url, data)
+        response = self.client.post(reverse('payment-list'), self._payload())
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_create_payment_admin_allowed(self):
-        """Админ может создать платёж (201)."""
+    def test_create_payment_admin_allowed_and_paid_by_default(self):
+        """Админ создаёт ручной платёж, статус по умолчанию — paid."""
         self.client.force_authenticate(user=self.admin)
-        url = reverse('payment-list')
-        data = {
-            'user': self.user1.id,
-            'course': self.course1.id,
-            'amount': '2500.00',
-            'payment_method': 'transfer',
-        }
-        response = self.client.post(url, data)
+        response = self.client.post(reverse('payment-list'), self._payload(amount='2500.00'))
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['status'], Payment.Status.PAID)
         self.assertEqual(Payment.objects.count(), 4)
 
-    def test_create_payment_both_course_and_lesson_fails(self):
-        """Нельзя создать платёж и с курсом, и с уроком (400)."""
+    def test_create_stripe_payment_manually_forbidden(self):
+        """Способ оплаты stripe вручную задать нельзя — только через checkout."""
         self.client.force_authenticate(user=self.admin)
-        url = reverse('payment-list')
-        data = {
-            'user': self.user1.id,
-            'course': self.course1.id,
-            'lesson': self.lesson1.id,
-            'amount': '1000.00',
-            'payment_method': 'cash',
-        }
-        response = self.client.post(url, data)
+        response = self.client.post(reverse('payment-list'), self._payload(payment_method='stripe'))
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('payment_method', response.data)
+
+    def test_create_payment_both_course_and_lesson_fails(self):
+        """Нельзя указать и курс, и урок (400)."""
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post(reverse('payment-list'), self._payload(lesson=self.lesson1.id))
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_create_payment_neither_course_nor_lesson_fails(self):
         """Нельзя создать платёж без курса и без урока (400)."""
         self.client.force_authenticate(user=self.admin)
-        url = reverse('payment-list')
-        data = {
-            'user': self.user1.id,
-            'amount': '1000.00',
-            'payment_method': 'cash',
-        }
-        response = self.client.post(url, data)
+        data = {'user': self.user1.id, 'amount': '1000.00', 'payment_method': 'cash'}
+        response = self.client.post(reverse('payment-list'), data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_retrieve_payment(self):
-        """Детальная платежа (200)."""
-        self.client.force_authenticate(user=self.user1)
-        url = reverse('payment-detail', args=[self.payment1.id])
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['amount'], '5000.00')
+    # --- Изменение и удаление ---
 
     def test_update_payment_admin_allowed(self):
-        """Админ может обновить платёж (200)."""
+        """Админ обновляет платёж (200)."""
         self.client.force_authenticate(user=self.admin)
-        url = reverse('payment-detail', args=[self.payment1.id])
-        response = self.client.patch(url, {'amount': '5500.00'})
+        response = self.client.patch(reverse('payment-detail', args=[self.payment1.id]), {'amount': '5500.00'})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.payment1.refresh_from_db()
         self.assertEqual(self.payment1.amount, 5500)
 
     def test_update_payment_authenticated_forbidden(self):
-        """Обычный авторизованный не может обновить платёж (403)."""
+        """Обычный пользователь не может изменить платёж (403)."""
         self.client.force_authenticate(user=self.user1)
-        url = reverse('payment-detail', args=[self.payment1.id])
-        response = self.client.patch(url, {'amount': '5500.00'})
+        response = self.client.patch(reverse('payment-detail', args=[self.payment1.id]), {'amount': '5500.00'})
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_delete_payment_admin_allowed(self):
-        """Админ может удалить платёж (204)."""
+        """Админ удаляет платёж (204)."""
         self.client.force_authenticate(user=self.admin)
-        url = reverse('payment-detail', args=[self.payment1.id])
-        response = self.client.delete(url)
+        response = self.client.delete(reverse('payment-detail', args=[self.payment1.id]))
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(Payment.objects.filter(pk=self.payment1.pk).exists())
 
     def test_delete_payment_authenticated_forbidden(self):
-        """Обычный авторизованный не может удалить платёж (403)."""
+        """Обычный пользователь не может удалить платёж (403)."""
         self.client.force_authenticate(user=self.user1)
-        url = reverse('payment-detail', args=[self.payment1.id])
-        response = self.client.delete(url)
+        response = self.client.delete(reverse('payment-detail', args=[self.payment1.id]))
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertTrue(Payment.objects.filter(pk=self.payment1.pk).exists())
 
+    # --- Фильтры и сортировка (от имени админа, чтобы видеть все платежи) ---
+
     def test_filter_by_course(self):
         """Фильтр ?course=<id>."""
-        url = reverse('payment-list')
-        response = self.client.get(url, {'course': self.course1.id})
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get(reverse('payment-list'), {'course': self.course1.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['count'], 1)
         self.assertEqual(response.data['results'][0]['id'], self.payment1.id)
 
     def test_filter_by_lesson(self):
         """Фильтр ?lesson=<id>."""
-        url = reverse('payment-list')
-        response = self.client.get(url, {'lesson': self.lesson1.id})
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get(reverse('payment-list'), {'lesson': self.lesson1.id})
         self.assertEqual(response.data['count'], 1)
         self.assertEqual(response.data['results'][0]['id'], self.payment2.id)
 
     def test_filter_by_payment_method(self):
         """Фильтр ?payment_method=cash."""
-        url = reverse('payment-list')
-        response = self.client.get(url, {'payment_method': 'cash'})
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get(reverse('payment-list'), {'payment_method': 'cash'})
         self.assertEqual(response.data['count'], 1)
         self.assertEqual(response.data['results'][0]['id'], self.payment2.id)
 
     def test_filter_by_user(self):
         """Фильтр ?user=<id>."""
-        url = reverse('payment-list')
-        response = self.client.get(url, {'user': self.user1.id})
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get(reverse('payment-list'), {'user': self.user1.id})
+        self.assertEqual(response.data['count'], 2)
+        ids = {p['id'] for p in response.data['results']}
+        self.assertEqual(ids, {self.payment1.id, self.payment2.id})
+
+    def test_filter_by_status(self):
+        """Фильтр ?status=paid."""
+        Payment.objects.filter(pk=self.payment3.pk).update(status=Payment.Status.PENDING)
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get(reverse('payment-list'), {'status': Payment.Status.PAID})
         self.assertEqual(response.data['count'], 2)
         ids = {p['id'] for p in response.data['results']}
         self.assertEqual(ids, {self.payment1.id, self.payment2.id})
 
     def test_ordering_by_payment_date_asc(self):
-        """Сортировка ?ordering=payment_date — asc."""
-        url = reverse('payment-list')
-        response = self.client.get(url, {'ordering': 'payment_date'})
+        """Сортировка ?ordering=payment_date — по возрастанию."""
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get(reverse('payment-list'), {'ordering': 'payment_date'})
         ids = [p['id'] for p in response.data['results']]
         self.assertEqual(ids, [self.payment1.id, self.payment2.id, self.payment3.id])
 
     def test_ordering_by_payment_date_desc(self):
-        """Сортировка ?ordering=-payment_date — desc."""
-        url = reverse('payment-list')
-        response = self.client.get(url, {'ordering': '-payment_date'})
+        """Сортировка ?ordering=-payment_date — по убыванию."""
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get(reverse('payment-list'), {'ordering': '-payment_date'})
         ids = [p['id'] for p in response.data['results']]
         self.assertEqual(ids, [self.payment3.id, self.payment2.id, self.payment1.id])
 
 
 class UserViewSetTests(APITestCase):
-    """Тесты для UserViewSet: CRUD, права, история платежей."""
+    """Тесты для UserViewSet: CRUD, права, скрытие истории платежей."""
 
     @classmethod
     def setUpTestData(cls):
@@ -256,6 +271,16 @@ class UserViewSetTests(APITestCase):
         self.assertTrue(User.objects.filter(email='new@agroacademy.local').exists())
         new_user = User.objects.get(email='new@agroacademy.local')
         self.assertTrue(new_user.check_password('newpassword123'))
+        # Пароль не должен возвращаться в ответе
+        self.assertNotIn('password', response.data)
+
+    def test_create_user_with_existing_email_fails(self):
+        """Повторная регистрация на тот же email — 400."""
+        url = reverse('user-list')
+        data = {'email': 'view1@agroacademy.local', 'password': 'newpassword123'}
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('email', response.data)
 
     def test_retrieve_user_with_payments(self):
         """Владелец видит свои payments и payments_count (200)."""
@@ -275,6 +300,22 @@ class UserViewSetTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertNotIn('payments', response.data)
         self.assertNotIn('payments_count', response.data)
+
+    def test_update_own_profile(self):
+        """Владелец может обновить свой профиль (200)."""
+        self.client.force_authenticate(user=self.user1)
+        url = reverse('user-detail', args=[self.user1.id])
+        response = self.client.patch(url, {'city': 'Астрахань'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.user1.refresh_from_db()
+        self.assertEqual(self.user1.city, 'Астрахань')
+
+    def test_update_foreign_profile_forbidden(self):
+        """Чужой профиль редактировать нельзя (403)."""
+        self.client.force_authenticate(user=self.user2)
+        url = reverse('user-detail', args=[self.user1.id])
+        response = self.client.patch(url, {'city': 'Взлом'})
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_destroy_user_anonymous_forbidden(self):
         """Аноним не может удалить пользователя (401)."""
@@ -304,7 +345,7 @@ class UserViewSetTests(APITestCase):
 
 
 class UserPaymentsHistoryTests(APITestCase):
-    """Тесты на историю платежей в UserSerializer (доп. задание *)."""
+    """Тесты на историю платежей в UserSerializer."""
 
     @classmethod
     def setUpTestData(cls):
@@ -312,7 +353,6 @@ class UserPaymentsHistoryTests(APITestCase):
             email='history@agroacademy.local',
             password='test12345',
         )
-        # Добавили владельца курсу
         cls.course = Course.objects.create(title='Курс', owner=cls.user)
         Payment.objects.create(
             user=cls.user,
@@ -339,12 +379,22 @@ class UserPaymentsHistoryTests(APITestCase):
         self.assertEqual(amounts, {'1000.00', '2000.00'})
 
     def test_user_serializer_hides_payments_for_anonymous(self):
-        """Аноним НЕ видит историю платежей (доп. задание)."""
+        """Аноним НЕ видит историю платежей."""
         url = reverse('user-detail', args=[self.user.id])
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertNotIn('payments', response.data)
         self.assertNotIn('payments_count', response.data)
+
+    def test_payments_have_status_field(self):
+        """В истории платежей есть статус (нужен фронтенду и документации)."""
+        self.client.force_authenticate(user=self.user)
+        url = reverse('user-detail', args=[self.user.id])
+        response = self.client.get(url)
+        for payment in response.data['payments']:
+            self.assertIn('status', payment)
+            self.assertIn('status_display', payment)
+            self.assertIn('payment_method_display', payment)
 
 
 class JWTAuthTests(APITestCase):

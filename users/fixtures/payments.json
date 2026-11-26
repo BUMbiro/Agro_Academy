@@ -8,7 +8,13 @@
       "course": 1,
       "lesson": null,
       "amount": "5000.00",
-      "payment_method": "transfer"
+      "payment_method": "transfer",
+      "status": "paid",
+      "stripe_product_id": "",
+      "stripe_price_id": "",
+      "stripe_session_id": "",
+      "payment_link": "",
+      "link_expires_at": null
     }
   },
   {
@@ -20,7 +26,13 @@
       "course": null,
       "lesson": 2,
       "amount": "1500.00",
-      "payment_method": "cash"
+      "payment_method": "cash",
+      "status": "paid",
+      "stripe_product_id": "",
+      "stripe_price_id": "",
+      "stripe_session_id": "",
+      "payment_link": "",
+      "link_expires_at": null
     }
   },
   {
@@ -32,7 +44,13 @@
       "course": 2,
       "lesson": null,
       "amount": "3000.00",
-      "payment_method": "transfer"
+      "payment_method": "transfer",
+      "status": "paid",
+      "stripe_product_id": "",
+      "stripe_price_id": "",
+      "stripe_session_id": "",
+      "payment_link": "",
+      "link_expires_at": null
     }
   },
   {
@@ -44,7 +62,13 @@
       "course": null,
       "lesson": 4,
       "amount": "800.00",
-      "payment_method": "cash"
+      "payment_method": "cash",
+      "status": "paid",
+      "stripe_product_id": "",
+      "stripe_price_id": "",
+      "stripe_session_id": "",
+      "payment_link": "",
+      "link_expires_at": null
     }
   }
 ]

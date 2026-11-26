@@ -1,5 +1,7 @@
 import os
+import sys
 from datetime import timedelta
+from decimal import Decimal
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -25,7 +27,6 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-your-secret-key')
 
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
-# ALLOWED_HOSTS из окружения
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 INSTALLED_APPS = [
@@ -37,9 +38,11 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     # DRF
     'rest_framework',
-    'rest_framework_simplejwt',  # JWT
+    'rest_framework_simplejwt',
     # Фильтрация
     'django_filters',
+    # Документация API (OpenAPI 3)
+    'drf_spectacular',
     # Локальные приложения
     'users',
     'materials',
@@ -75,7 +78,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
-# PostgreSQL (из .env)
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
@@ -84,6 +86,9 @@ DATABASES = {
         'PASSWORD': os.getenv('DB_PASSWORD', ''),
         'HOST': os.getenv('DB_HOST', 'localhost'),
         'PORT': os.getenv('DB_PORT', '5432'),
+        'OPTIONS': {
+            'connect_timeout': 5,
+        },
     }
 }
 
@@ -114,19 +119,63 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10,
-    # Аутентификация через JWT
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
-    # По умолчанию — только авторизованные
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
-    # Фильтрация + сортировка
     'DEFAULT_FILTER_BACKENDS': [
         'django_filters.rest_framework.DjangoFilterBackend',
         'rest_framework.filters.OrderingFilter',
     ],
+    # Генерация OpenAPI-схемы
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    # Лимит на создание платёжных сессий (рекомендация Stripe)
+    'DEFAULT_THROTTLE_RATES': {
+        'payments_checkout': '10/minute',
+    },
+}
+
+# ============================================================
+# Документация API (drf-spectacular)
+# ============================================================
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'AgroAcademy API',
+    'DESCRIPTION': (
+        'REST API образовательной платформы **«Фермерская академия»**: курсы и уроки '
+        'для фермеров и агробизнеса, подписки, платежи и онлайн-оплата через **Stripe**.\n\n'
+        '### Авторизация\n'
+        '1. Получите токены: `POST /api/token/` (email + пароль).\n'
+        '2. Нажмите **Authorize** и вставьте `access`-токен (без слова Bearer).\n\n'
+        '### Онлайн-оплата\n'
+        '`POST /api/payments/checkout/` → перейдите по `payment_link` → оплатите тестовой картой '
+        '`4242 4242 4242 4242` → проверьте статус `GET /api/payments/{id}/status/`.'
+    ),
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    # Отдельные схемы для запроса и ответа (корректные read_only / write_only и загрузка файлов)
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SCHEMA_PATH_PREFIX': r'/api/',
+    'SWAGGER_UI_SETTINGS': {
+        'persistAuthorization': True,  # токен не сбрасывается после перезагрузки страницы
+        'docExpansion': 'none',
+        'filter': True,
+    },
+    'TAGS': [
+        {'name': 'Авторизация', 'description': 'Получение и обновление JWT-токенов.'},
+        {'name': 'Пользователи', 'description': 'Регистрация и профили.'},
+        {'name': 'Курсы', 'description': 'CRUD курсов. Владелец видит свои, модератор — все.'},
+        {'name': 'Подписки', 'description': 'Подписка на обновления курса.'},
+        {'name': 'Уроки', 'description': 'CRUD уроков (Generic-классы).'},
+        {'name': 'Платежи', 'description': 'История платежей и онлайн-оплата через Stripe.'},
+    ],
+    # Единые имена enum-ов в схеме (без предупреждений о коллизиях)
+    'ENUM_NAME_OVERRIDES': {
+        'PaymentMethodEnum': 'users.models.Payment.PaymentMethod',
+        'PaymentStatusEnum': 'users.models.Payment.Status',
+    },
 }
 
 # ============================================================
@@ -140,7 +189,22 @@ SIMPLE_JWT = {
 }
 
 # ============================================================
+# Stripe
+# ============================================================
+
+STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY', '')
+STRIPE_CURRENCY = os.getenv('STRIPE_CURRENCY', 'rub').lower()
+STRIPE_MIN_AMOUNT = Decimal(os.getenv('STRIPE_MIN_AMOUNT', '50'))
+# Пусто = строятся автоматически от адреса запроса
+STRIPE_SUCCESS_URL = os.getenv('STRIPE_SUCCESS_URL', '')
+STRIPE_CANCEL_URL = os.getenv('STRIPE_CANCEL_URL', '')
+
+# ============================================================
 # Кастомная модель пользователя
 # ============================================================
 
 AUTH_USER_MODEL = 'users.User'
+
+# В тестах не тратим время на медленное хеширование паролей
+if 'test' in sys.argv:
+    PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']

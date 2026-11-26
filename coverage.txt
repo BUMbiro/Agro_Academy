@@ -1,25 +1,27 @@
 Name                       Stmts   Miss  Cover   Missing
 --------------------------------------------------------
 config\__init__.py             0      0   100%
-config\settings.py            37      1    97%   11
-config\urls.py                 3      0   100%
+config\openapi.py             12      0   100%
+config\settings.py            47      1    98%   13
+config\urls.py                 4      0   100%
 materials\__init__.py          0      0   100%
-materials\admin.py            16      0   100%
+materials\admin.py            39      3    92%   26, 35, 69
 materials\apps.py              3      0   100%
-materials\models.py           40      3    92%   46, 94, 128
+materials\models.py           53      5    91%   60, 65, 124, 129, 167
 materials\paginators.py        5      0   100%
-materials\serializers.py      37      1    97%   25
+materials\serializers.py      42      1    98%   32
 materials\urls.py              6      0   100%
 materials\validators.py       12      0   100%
-materials\views.py            73      2    97%   32, 103
+materials\views.py            86      0   100%
 users\__init__.py              0      0   100%
-users\admin.py                19      0   100%
+users\admin.py                38      8    79%   33-35, 39, 83-87
 users\apps.py                  3      0   100%
 users\managers.py             19      3    84%   10, 25, 27
-users\models.py               44      6    86%   60, 130-132, 137-138
-users\permissions.py          29      5    83%   18, 27, 54-56
-users\serializers.py          51      1    98%   49
-users\urls.py                 11      0   100%
-users\views.py                28      1    96%   22
+users\models.py               55      6    89%   31, 99-101, 104-105
+users\permissions.py          29      3    90%   18, 27, 55
+users\serializers.py          96      1    99%   130
+users\services.py             77     10    87%   42, 63-64, 77-79, 89, 130-133, 151
+users\urls.py                  7      0   100%
+users\views.py               117      2    98%   279-280
 --------------------------------------------------------
-TOTAL                        436     23    95%
+TOTAL                        750     43    94%
