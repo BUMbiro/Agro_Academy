@@ -1,5 +1,7 @@
 # 👨‍🌾 Фермерская академия (AgroAcademy) 🎓
 
+[![Checks](https://github.com/BUMbiro/Agro_Academy/actions/workflows/checks.yml/badge.svg)](https://github.com/BUMbiro/Agro_Academy/actions/workflows/checks.yml)
+
 **Фермерская академия** — учебный REST API образовательной платформы, созданный в рамках домашних
 заданий по **Django REST Framework**. Проект позволяет создавать курсы и уроки для фермеров и
 агробизнеса (ФГИС, декларации, агрономия), оформлять подписки и продавать материалы с
@@ -25,7 +27,8 @@
 - **Пагинация** — кастомный пагинатор (`page`, `page_size`, максимум 50).
 - **Оптимизация** — `select_related`, `prefetch_related`, `Prefetch` для подписок, индексы в БД.
 - **Защита от злоупотреблений** — лимит 10 запросов на создание платёжной сессии в минуту.
-- **Качество кода** — `flake8` без замечаний, `coverage` для контроля покрытия тестами.
+- **Качество кода** — `flake8` без замечаний, `coverage` для контроля покрытия.
+- **CI** — GitHub Actions: линтер, тесты на PostgreSQL и замер покрытия при каждом push.
 
 ---
 
@@ -125,11 +128,16 @@ Authorization: Bearer <access>
 {
   "id": 5,
   "user": 2,
+  "payment_date": "2026-11-25T12:00:00+03:00",
   "course": 1,
   "course_title": "ФГИС Росаккредитация",
+  "lesson": null,
+  "lesson_title": null,
   "amount": "1500.00",
   "payment_method": "stripe",
+  "payment_method_display": "Онлайн-оплата (Stripe)",
   "status": "pending",
+  "status_display": "Ожидает оплаты",
   "payment_link": "https://checkout.stripe.com/c/pay/cs_test_...",
   "link_expires_at": "2026-11-26T12:00:00+03:00",
   "stripe_product_id": "prod_RxYz123",
@@ -231,6 +239,22 @@ flake8 .
 
 ---
 
+## ⚙️ CI (GitHub Actions)
+
+Workflow `.github/workflows/checks.yml` запускается при каждом push и pull request:
+
+1. Поднимает контейнер **PostgreSQL 17** как service.
+2. Ставит зависимости из `requirements.txt` и `requirements-dev.txt`.
+3. Запускает `flake8 .` (линтер).
+4. Запускает `python manage.py test` (128 тестов).
+5. Считает покрытие через `coverage report -m`.
+
+Переменные окружения (`SECRET_KEY`, `DB_*`, `STRIPE_SECRET_KEY`) передаются через `env:`
+в workflow, поэтому `.env` в CI не нужен. Статус последнего запуска виден по бейджу вверху
+страницы.
+
+---
+
 ## 🛠 Технологический стек
 
 - **Python 3.12**
@@ -243,6 +267,7 @@ flake8 .
 - **psycopg 3.3.9** (`psycopg[binary]`) — драйвер PostgreSQL
 - **coverage 7.5.1** — анализ покрытия тестами
 - **flake8** — проверка соответствия PEP 8
+- **GitHub Actions** — CI: линтер, тесты, покрытие
 - **PostgreSQL 17** — база данных
 - **Pillow 13.0.0** — изображения (превью, аватары)
 - Чтение `.env` — собственный мини-парсер в `config/settings.py`
@@ -274,6 +299,12 @@ python -m venv .venv
 
 ```bash
 pip install -r requirements.txt
+```
+
+Для разработки (линтер и покрытие) дополнительно:
+
+```bash
+pip install -r requirements-dev.txt
 ```
 
 ### 4. Создайте пользователя и базу PostgreSQL
@@ -399,6 +430,9 @@ python manage.py runserver
 
 ```text
 Agro_Academy/
+├── .github/
+│   └── workflows/
+│       └── checks.yml          # CI: PostgreSQL, flake8, тесты, покрытие
 ├── users/                      # Пользователи и платежи
 │   ├── fixtures/
 │   │   ├── groups.json         # Группа Moderator
@@ -445,7 +479,8 @@ Agro_Academy/
 ├── coverage.txt                # Текстовый отчёт покрытия
 ├── manage.py
 ├── README.md
-└── requirements.txt
+├── requirements.txt            # Боевые зависимости
+└── requirements-dev.txt        # Линтер и coverage для CI
 ```
 
 ---
@@ -562,6 +597,7 @@ Agro_Academy/
 | `InsecureKeyLengthWarning` от PyJWT | `SECRET_KEY` короче 32 символов — сгенерируйте новый |
 | `W292 no newline at end of file` | В конце файла нет перевода строки. Включите `insert_final_newline` — он уже задан в `.editorconfig` |
 | `flake8` ругается на `.venv` и миграции | Параметр `--exclude` в командной строке **заменяет** список из `.flake8`. Запускайте просто `flake8 .` или используйте `--extend-exclude` |
+| CI падает на шаге Tests | Проверьте, что сервис `postgres` поднялся (ветка `services` в workflow) и `DB_*` в `env:` совпадают с ним |
 
 ---
 

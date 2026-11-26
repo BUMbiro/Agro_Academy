@@ -1,0 +1,64 @@
+name: Checks
+
+on:
+  push:
+    branches: [main, develop, 'feature/**']
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: agro_academy
+          POSTGRES_USER: agro_academy_user
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      SECRET_KEY: ci-only-secret-key-0123456789abcdefghijklmnop
+      DEBUG: 'False'
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      DB_NAME: agro_academy
+      DB_USER: agro_academy_user
+      DB_PASSWORD: postgres
+      DB_HOST: localhost
+      DB_PORT: '5432'
+      STRIPE_SECRET_KEY: sk_test_dummy
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Lint
+        run: flake8 .
+
+      - name: Tests
+        run: python manage.py test
+
+      - name: Coverage
+        run: |
+          coverage run --source=. manage.py test
+          coverage report -m
